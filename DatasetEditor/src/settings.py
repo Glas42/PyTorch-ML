@@ -1,4 +1,4 @@
-import variables
+import src.variables as variables
 import json
 
 
@@ -17,8 +17,8 @@ def EnsureFile(file:str):
 
 def Get(name:str, value:any=None):
     try:
-        EnsureFile(f"{variables.PATH}src/settings.json")
-        with open(f"{variables.PATH}src/settings.json", "r") as f:
+        EnsureFile(f"{variables.PATH}settings.json")
+        with open(f"{variables.PATH}settings.json", "r") as f:
             settings = json.load(f)
 
         if settings[name] == None:
@@ -35,13 +35,13 @@ def Get(name:str, value:any=None):
 
 def Set(name:str, data:any):
     try:
-        EnsureFile(f"{variables.PATH}src/settings.json")
-        with open(f"{variables.PATH}src/settings.json", "r") as f:
+        EnsureFile(f"{variables.PATH}settings.json")
+        with open(f"{variables.PATH}settings.json", "r") as f:
             settings = json.load(f)
 
             settings[name] = data
 
-        with open(f"{variables.PATH}src/settings.json", "w") as f:
+        with open(f"{variables.PATH}settings.json", "w") as f:
             f.truncate(0)
             json.dump(settings, f, indent=6)
     except:
