@@ -2,3 +2,4 @@
 **/__pycache__
 
 # ignore the ModelFiles
+/ModelFiles
