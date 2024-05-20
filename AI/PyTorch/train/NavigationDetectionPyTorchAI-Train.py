@@ -10,14 +10,20 @@ from PIL import Image
 import numpy as np
 import datetime
 import torch
+import json
 import time
 import cv2
 import os
 
 # Constants
-SCRIPT_PATH = os.path.dirname(os.path.realpath(__file__))
-DATA_PATH = "C:/Users/olefr/Downloads/AIDATA"
-MODEL_PATH = SCRIPT_PATH
+PATH = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+DATA_PATH = json.load(open(os.path.join(PATH, 'settings.json'), 'r'))['DatasetPath']
+MODEL_PATH = PATH + "\\models"
+
+if DATA_PATH == "unset" or os.path.exists(DATA_PATH) == False:
+    print("Please set the dataset path in settings.json")
+    exit()
+
 IMG_HEIGHT = 220
 IMG_WIDTH = 420
 NUM_EPOCHS = 300
