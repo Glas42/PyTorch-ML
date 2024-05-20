@@ -1,5 +1,5 @@
-# ignore the settings
-settings.json
-
 # ignore pycache everywhere
 **/__pycache__
+
+# ignore the ModelFiles
+/ModelFiles

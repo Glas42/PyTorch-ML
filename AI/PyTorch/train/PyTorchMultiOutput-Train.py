@@ -14,8 +14,9 @@ IMG_WIDTH = 420
 IMG_HEIGHT = 220
 OUTPUTS = 3
 
-DATAPATH = "C:/Users/olefr/Downloads/AIDATA"
-MODELPATH = os.path.dirname(os.path.realpath(__file__))
+PATH = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+DATA_PATH = PATH + "\\ModelFiles\\EditedTrainingData"
+MODEL_PATH = PATH + "\\ModelFiles\\Models"
 
 print("Training on " + "CUDA" if torch.cuda.is_available() else "CPU")
 

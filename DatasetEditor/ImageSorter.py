@@ -1,4 +1,3 @@
-import src.settings as settings
 import keyboard
 import time
 import cv2
@@ -8,14 +7,11 @@ images = []
 last = time.time()
 imgpersec = 50
 
-dataset_path = settings.Get("DatasetPath", "unset")
-if dataset_path == "unset" or not os.path.exists(dataset_path):
-    print("Set DatasetPath in settings.json!")
-    exit()
+PATH = os.path.dirname(os.path.dirname(__file__)) + "\\ModelFiles\\"
 
-for file in os.listdir(dataset_path):
+for file in os.listdir(f"{PATH}EditedTrainingData"):
     if file.endswith(".png"):
-        images.append((cv2.imread(os.path.join(f"{dataset_path}/{file}")), f"{dataset_path}/{file}"))
+        images.append((cv2.imread(os.path.join(f"{PATH}EditedTrainingData/{file}")), f"{PATH}EditedTrainingData/{file}"))
         
 for image, path in images:
     start = time.time()

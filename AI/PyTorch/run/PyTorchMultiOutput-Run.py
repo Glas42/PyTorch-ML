@@ -11,11 +11,11 @@ import os
 IMG_WIDTH = 420
 IMG_HEIGHT = 220
 
-SCRIPT_PATH = os.path.dirname(os.path.realpath(__file__))
+PATH = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))) + "\\ModelFiles\\Models"
 MODEL_PATH = ""
-for file in os.listdir(SCRIPT_PATH):
+for file in os.listdir(PATH):
     if file.endswith(".pt"):
-        MODEL_PATH = os.path.join(SCRIPT_PATH, file)
+        MODEL_PATH = os.path.join(PATH, file)
         break
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')

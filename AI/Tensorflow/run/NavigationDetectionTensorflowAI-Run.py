@@ -13,11 +13,11 @@ gamepad = vg.VX360Gamepad()
 lower_red = np.array([0, 0, 160])
 upper_red = np.array([110, 110, 255])
 
-SCRIPT_PATH = os.path.dirname(os.path.realpath(__file__))
+PATH = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))) + "\\ModelFiles\\Models"
 MODEL_PATH = ""
-for file in os.listdir(SCRIPT_PATH):
+for file in os.listdir(PATH):
     if file.endswith(".h5"):
-        MODEL_PATH = os.path.join(SCRIPT_PATH, file)
+        MODEL_PATH = os.path.join(PATH, file)
         break
 IMG_WIDTH = 420
 IMG_HEIGHT = 220

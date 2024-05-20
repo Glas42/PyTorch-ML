@@ -6,9 +6,9 @@ from tensorflow.keras import layers, models
 from PIL import Image
 
 # Constants
-SCRIPT_PATH = os.path.dirname(os.path.realpath(__file__))
-DATA_PATH = r"C:\Users\olefr\Downloads\AIDATA"
-MODEL_PATH = SCRIPT_PATH
+PATH = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+DATA_PATH = PATH + "\\ModelFiles\\EditedTrainingData"
+MODEL_PATH = PATH + "\\ModelFiles\\Models"
 IMG_HEIGHT = 220
 IMG_WIDTH = 420
 NUM_EPOCHS = 500
