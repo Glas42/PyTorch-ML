@@ -1,8 +1,6 @@
 from torchvision import transforms
 import torch.nn.functional as F
 import torch.nn as nn
-from PIL import Image
-import vgamepad as vg
 import numpy as np
 import bettercam
 import torch
@@ -10,11 +8,14 @@ import time
 import cv2
 import os
 
+from SDKController import SCSController
+controller = SCSController()
+
 # Set device to CUDA if available, otherwise fall back to CPU
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 camera = bettercam.create(output_color="BGR", output_idx=0)
-gamepad = vg.VX360Gamepad()
+
 lower_red = np.array([0, 0, 160])
 upper_red = np.array([110, 110, 255])
 
@@ -73,22 +74,25 @@ while True:
     with torch.no_grad():
         output = model(transform(frame).unsqueeze(0).to(device))
         output = output.tolist()
-        print(output[0])
 
-    steering = output[0][0] / -30
-    left_indicator = output[0][1]
-    right_indicator = output[0][2]
+    steering = float(output[0][0] / -30)
+    left_indicator = float(output[0][1])
+    right_indicator = float(output[0][2])
+    left_indicator_bool = bool(left_indicator > 0.5)
+    right_indicator_bool = bool(right_indicator > 0.5)
 
-    gamepad.left_joystick_float(x_value_float=steering, y_value_float=0)
-    gamepad.update()
+    controller.steering = steering
+    controller.lblinker = left_indicator_bool
+    controller.rblinker = right_indicator_bool
 
-    cv2.putText(frame, f"FPS: {round(1 / (time.time() - start), 1)}", (5, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
-    cv2.putText(frame, f"Steering: {round(steering, 2)}", (5, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
-    cv2.putText(frame, f"Left Indicator: {round(left_indicator, 2)}", (5, 75), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
-    cv2.putText(frame, f"Right Indicator: {round(right_indicator, 2)}", (5, 100), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
-    
+    cv2.putText(frame, f"FPS: {round(1 / (time.time() - start), 1)}", (5, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 255), 1, cv2.LINE_AA)
+    cv2.putText(frame, f"Steer: {round(steering, 2)}", (5, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 1, cv2.LINE_AA)
+    cv2.putText(frame, f"Left: {round(left_indicator, 2)}", (5, 75), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 1, cv2.LINE_AA)
+    cv2.putText(frame, f"Right: {round(right_indicator, 2)}", (5, 100), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 1, cv2.LINE_AA)
+
     cv2.imshow('frame', frame)
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
 cv2.destroyAllWindows()
+controller.close()
