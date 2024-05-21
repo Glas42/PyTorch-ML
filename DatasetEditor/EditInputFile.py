@@ -6,11 +6,19 @@ count = len(os.listdir(f"{PATH}TrainingData")) / 2
 curCount = 0
 for file in os.listdir(f"{PATH}TrainingData"):
     if file.endswith(".txt"):
-        line = open(os.path.join(f"{PATH}TrainingData", file), "r").readline()
-        line = line.split(",")
-        line = float(line[0])
-        line = line * 300
-        line = str(line)
+        line = str(open(os.path.join(f"{PATH}TrainingData", file), "r").readline())
+
+        pairs = line.split(',')
+        for pair in pairs:
+            key, value = pair.split(':')
+            if key == 'Correction':
+                correction = float(value)
+            elif key == 'LeftIndicator':
+                left_indicator = value.lower() == 'true'
+            elif key == 'RightIndicator':
+                right_indicator = value.lower() == 'true'
+        line = f"{correction},{left_indicator},{right_indicator}"
+
         with open(os.path.join(f"{PATH}EditedTrainingData", file), "w") as f:
             f.truncate(0)
             f.write(line)

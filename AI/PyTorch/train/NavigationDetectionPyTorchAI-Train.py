@@ -6,6 +6,7 @@ from torchvision import transforms
 import torch.optim as optim
 import multiprocessing
 import torch.nn as nn
+import torch.nn.functional as F
 from PIL import Image
 import numpy as np
 import datetime
@@ -18,31 +19,27 @@ import os
 PATH = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 DATA_PATH = PATH + "\\ModelFiles\\EditedTrainingData"
 MODEL_PATH = PATH + "\\ModelFiles\\Models"
+DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 IMG_HEIGHT = 220
 IMG_WIDTH = 420
-NUM_EPOCHS = 300
+NUM_EPOCHS = 100
 BATCH_SIZE = 200
-
-print("\n------------------------------------\n")
-
-print(f"CUDA available: {torch.cuda.is_available()}")
-
-# Check for CUDA availability
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-print(f"Using {device} for training")
-
-# Determine the number of CPU cores
-num_cpu_cores = multiprocessing.cpu_count()
-print('Number of CPU cores:', num_cpu_cores)
+OUTPUTS = 3
 
 image_count = 0
 for file in os.listdir(DATA_PATH):
     if file.endswith(".png"):
         image_count += 1
 
+print("\n------------------------------------\n")
+
+print(f"Using {str(DEVICE).upper()} for training")
+print('Number of CPU cores:', multiprocessing.cpu_count())
+
 print("\nTraining settings:")
 print("> Epochs:", NUM_EPOCHS)
 print("> Batch size:", BATCH_SIZE)
+print("> Output size:", OUTPUTS)
 print("> Image width:", IMG_WIDTH)
 print("> Image height:", IMG_HEIGHT)
 print("> Images:", image_count)
@@ -51,35 +48,36 @@ print("\n------------------------------------\n")
 
 print("Loading...")
 
-# Define custom dataset
-class CustomDataset(Dataset):
-    def __init__(self, data_path, transform=None):
-        self.data_path = data_path
-        self.transform = transform
-        self.images, self.user_inputs = self.load_data(data_path)
+def load_data(): 
+    images = []
+    user_inputs = []
+    for file in os.listdir(DATA_PATH):
+        if file.endswith(".png"):
+
+            img = Image.open(os.path.join(DATA_PATH, file)).convert('RGB')  # Ensure image is in RGB format
+            img = np.array(img)
+            img = cv2.resize(img, (IMG_WIDTH, IMG_HEIGHT))
+            img = np.array(img, dtype=np.float32) / 255.0  # Convert to float32
+
+            user_inputs_file = os.path.join(DATA_PATH, file.replace(".png", ".txt"))
+            if os.path.exists(user_inputs_file):
+                with open(user_inputs_file, 'r') as f:
+                    content = str(f.read()).split(',')
+                    steering, left_indicator, right_indicator = float(content[0]), 1 if str(content[1]) == 'True' else 0, 1 if str(content[2]) == 'True' else 0
+                    user_input = [steering, left_indicator, right_indicator]
+                images.append(img)
+                user_inputs.append(user_input)
+            else:
+                pass
     
-    def load_data(self, data_path):
-        images = []
-        user_inputs = []
-        for file in os.listdir(data_path):
-            if file.endswith(".png"):
-                # Load image
-                img = Image.open(os.path.join(data_path, file))
-                img = np.array(img)
-                img = cv2.resize(img, (IMG_WIDTH, IMG_HEIGHT))
-                img_array = np.array(img) / 255.0
-                
-                # Load steering angle if corresponding file exists
-                user_inputs_file = os.path.join(data_path, file.replace(".png", ".txt"))
-                if os.path.exists(user_inputs_file):
-                    with open(user_inputs_file, 'r') as f:
-                        user_input = float(f.read().strip())
-                    images.append(img_array)
-                    user_inputs.append(user_input)
-                else:
-                    pass
-        
-        return np.array(images), np.array(user_inputs)
+    return np.array(images, dtype=np.float32), np.array(user_inputs, dtype=np.float32)  # Convert to float32
+
+# Custom dataset class
+class CustomDataset(Dataset):
+    def __init__(self, images, user_inputs, transform=None):
+        self.images = images
+        self.user_inputs = user_inputs
+        self.transform = transform
 
     def __len__(self):
         return len(self.images)
@@ -89,46 +87,42 @@ class CustomDataset(Dataset):
         user_input = self.user_inputs[idx]
         if self.transform:
             image = self.transform(image)
-        return image, user_input
+        return image, torch.tensor(user_input, dtype=torch.float32)
 
-# Define transformation
-transform = transforms.Compose([
-    transforms.Lambda(lambda x: to_pil_image(x)),  # Convert to PIL Image
-    transforms.Resize((IMG_HEIGHT, IMG_WIDTH)),
-    transforms.Lambda(lambda x: x.convert("L")),   # Convert to grayscale
-    transforms.Lambda(lambda x: x.point(lambda p: p > 128 and 255)),  # Convert to binary
-    transforms.ToTensor()
-])
-
-# Load data
-dataset = CustomDataset(DATA_PATH, transform=transform)
-dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True)
-
-# Define model
-class Net(nn.Module):
+# Define the model
+class SimpleCNN(nn.Module):
     def __init__(self):
-        super(Net, self).__init__()
-        self.conv1 = nn.Conv2d(1, 16, kernel_size=3, stride=1, padding=1)  # Adjust input channels to 1
-        self.pool = nn.MaxPool2d(kernel_size=2, stride=2, padding=0)
-        self.conv2 = nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1)
-        self.conv3 = nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1)
-        self.fc1 = nn.Linear(64 * 27 * 52, 64)
-        self.fc2 = nn.Linear(64, 1)
+        super(SimpleCNN, self).__init__()
+        self.conv1 = nn.Conv2d(3, 16, 3, padding=1)
+        self.pool = nn.MaxPool2d(2, 2)
+        self.conv2 = nn.Conv2d(16, 32, 3, padding=1)
+        self.fc1 = nn.Linear(32 * 55 * 105, 500)
+        self.fc2 = nn.Linear(500, OUTPUTS)
 
     def forward(self, x):
-        x = self.pool(torch.relu(self.conv1(x)))
-        x = self.pool(torch.relu(self.conv2(x)))
-        x = self.pool(torch.relu(self.conv3(x)))
-        x = x.view(-1, 64 * 27 * 52)
-        x = torch.relu(self.fc1(x))
+        x = self.pool(F.relu(self.conv1(x)))
+        x = self.pool(F.relu(self.conv2(x)))
+        x = x.view(-1, 32 * 55 * 105)
+        x = F.relu(self.fc1(x))
         x = self.fc2(x)
         return x
 
-model = Net().to(device)  # Move model to GPU if available
+# Load data
+images, user_inputs = load_data()
 
-# Define loss function and optimizer
+# Transformations
+transform = transforms.Compose([
+    transforms.ToTensor(),
+])
+
+# Create dataset and dataloader
+dataset = CustomDataset(images, user_inputs, transform=transform)
+dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=0)  # Set num_workers to 0
+
+# Initialize model, loss function, and optimizer
+model = SimpleCNN().to(DEVICE)
 criterion = nn.MSELoss()
-optimizer = optim.Adam(model.parameters())
+optimizer = optim.Adam(model.parameters(), lr=0.001)
 
 print("Starting training...")
 print("\n--------------------------------------------------------------\n")
@@ -140,16 +134,17 @@ for epoch in range(NUM_EPOCHS):
     running_loss = 0.0
     for i, data in enumerate(dataloader, 0):
         inputs, labels = data
-        inputs, labels = inputs.to(device), labels.to(device)
-        # Explicitly convert inputs and labels to torch.float32
-        inputs = inputs.float()
-        labels = labels.float()
+        inputs, labels = inputs.to(DEVICE), labels.to(DEVICE)
+        
         optimizer.zero_grad()
-        outputs = model(inputs)  # No need to call .float() here
-        loss = criterion(outputs, labels.unsqueeze(1))
+        
+        outputs = model(inputs)
+        loss = criterion(outputs, labels)
         loss.backward()
         optimizer.step()
+        
         running_loss += loss.item()
+    
     print(f"\rEpoch {epoch+1}, Loss: {running_loss / len(dataloader)}, {round((time.time() - update_time) if time.time() - update_time > 1 else (time.time() - update_time) * 1000, 2)}{'s' if time.time() - update_time > 1 else 'ms'}/Epoch, ETA: {time.strftime('%H:%M:%S', time.gmtime(round((time.time() - start_time) / (epoch + 1) * NUM_EPOCHS - (time.time() - start_time), 2)))}                       ", end='', flush=True)
     update_time = time.time()
 
@@ -159,7 +154,7 @@ print("\nTraining completed in " + time.strftime("%H:%M:%S", time.gmtime(time.ti
 
 # Save model
 print("Saving model...")
-torch.save(model.state_dict(), os.path.join(MODEL_PATH, f"EPOCHS-{NUM_EPOCHS}_BATCH-{BATCH_SIZE}_RES-{IMG_WIDTH}x{IMG_HEIGHT}_IMAGES-{len(dataset)}_TRAININGTIME-{time.strftime('%H-%M-%S', time.gmtime(time.time() - start_time))}_DATE-{datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')}.pt"))
+torch.save(model.state_dict(), os.path.join(MODEL_PATH, f"EPOCHS-{NUM_EPOCHS}_BATCH-{BATCH_SIZE}_RES-{IMG_WIDTH}x{IMG_HEIGHT}_IMAGES-{len(dataset)}_TRAININGTIME-{time.strftime('%H-%M-%S', gmtime(time.time() - start_time))}_DATE-{datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')}.pt"))
 print("Model saved successfully.")
 
 print("\n------------------------------------\n")
