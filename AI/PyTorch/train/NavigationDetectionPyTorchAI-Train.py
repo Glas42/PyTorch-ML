@@ -21,14 +21,14 @@ MODEL_PATH = PATH + "\\ModelFiles\\Models"
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 IMG_HEIGHT = 220
 IMG_WIDTH = 420
-NUM_EPOCHS = 50
-BATCH_SIZE = 50
+NUM_EPOCHS = 100
+BATCH_SIZE = 100
 OUTPUTS = 3
 
-image_count = 0
+IMG_COUNT = 0
 for file in os.listdir(DATA_PATH):
     if file.endswith(".png"):
-        image_count += 1
+        IMG_COUNT += 1
 
 print("\n------------------------------------\n")
 
@@ -41,7 +41,7 @@ print("> Batch size:", BATCH_SIZE)
 print("> Output size:", OUTPUTS)
 print("> Image width:", IMG_WIDTH)
 print("> Image height:", IMG_HEIGHT)
-print("> Images:", image_count)
+print("> Images:", IMG_COUNT)
 
 print("\n------------------------------------\n")
 
@@ -155,12 +155,15 @@ def main():
 
     print("\n\n--------------------------------------------------------------")
 
-    print("\nTraining completed in " + time.strftime("%H:%M:%S", time.gmtime(time.time() - start_time)))
+    TRAINING_TIME = time.strftime('%H-%M-%S', time.gmtime(time.time() - start_time))
+    TRAINING_DATE = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
+
+    print(f"\nTraining completed after " + TRAINING_TIME.replace('-', ':'))
 
     # Save model
     print("Saving model...")
     model = torch.jit.script(model)
-    torch.jit.save(model, os.path.join(MODEL_PATH, f"NavigationDetectionAI-EPOCHS-{NUM_EPOCHS}_BATCH-{BATCH_SIZE}_RES-{IMG_WIDTH}x{IMG_HEIGHT}_IMAGES-{len(dataset)}_TRAININGTIME-{time.strftime('%H-%M-%S', time.gmtime(time.time() - start_time))}_DATE-{datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')}.pt"))
+    torch.jit.save(model, os.path.join(MODEL_PATH, f"NavigationDetectionAI-EPOCHS-{NUM_EPOCHS}_BATCH-{BATCH_SIZE}_IMG_WIDTH-{IMG_WIDTH}_IMG_HEIGHT-{IMG_HEIGHT}_IMG_COUNT-{IMG_COUNT}_TRAININGTIME-{TRAINING_TIME}_DATE-{TRAINING_DATE}.pt"))
     print("Model saved successfully.")
 
     print("\n------------------------------------\n")
