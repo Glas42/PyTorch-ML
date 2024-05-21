@@ -94,18 +94,19 @@ class CustomDataset(Dataset):
 class ConvolutionalNeuralNetwork(nn.Module):
     def __init__(self):
         super(ConvolutionalNeuralNetwork, self).__init__()
-        self.conv1 = nn.Conv2d(1, 16, 3, padding=1)  # Input channels = 1 for grayscale images
+        self.conv1 = nn.Conv2d(1, 16, 3, padding=1)  # Input channels = 1 for binary images
         self.pool = nn.MaxPool2d(2, 2)
         self.conv2 = nn.Conv2d(16, 32, 3, padding=1)
         self.conv3 = nn.Conv2d(32, 64, 3, padding=1)
-        self.fc1 = nn.Linear(64 * 27 * 52, 500)
+        self._to_linear = 64 * 52 * 27
+        self.fc1 = nn.Linear(self._to_linear, 500)
         self.fc2 = nn.Linear(500, OUTPUTS)
 
     def forward(self, x):
-        x = self.pool(F.relu(self.conv1(x)))
-        x = self.pool(F.relu(self.conv2(x)))
-        x = self.pool(F.relu(self.conv3(x)))
-        x = x.view(-1, 64 * 27 * 52)
+        x = self.pool(F.relu(self.conv1(x)))  # 420x220 -> 210x110
+        x = self.pool(F.relu(self.conv2(x)))  # 210x110 -> 105x55
+        x = self.pool(F.relu(self.conv3(x)))  # 105x55 -> 52x27
+        x = x.view(-1, self._to_linear)  # Flatten the tensor
         x = F.relu(self.fc1(x))
         x = self.fc2(x)
         return x
@@ -158,7 +159,8 @@ def main():
 
     # Save model
     print("Saving model...")
-    torch.save(model.state_dict(), os.path.join(MODEL_PATH, f"EPOCHS-{NUM_EPOCHS}_BATCH-{BATCH_SIZE}_RES-{IMG_WIDTH}x{IMG_HEIGHT}_IMAGES-{len(dataset)}_TRAININGTIME-{time.strftime('%H-%M-%S', time.gmtime(time.time() - start_time))}_DATE-{datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')}.pt"))
+    model = torch.jit.script(model)
+    torch.jit.save(model, os.path.join(MODEL_PATH, f"NavigationDetectionAI-EPOCHS-{NUM_EPOCHS}_BATCH-{BATCH_SIZE}_RES-{IMG_WIDTH}x{IMG_HEIGHT}_IMAGES-{len(dataset)}_TRAININGTIME-{time.strftime('%H-%M-%S', time.gmtime(time.time() - start_time))}_DATE-{datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')}.pt"))
     print("Model saved successfully.")
 
     print("\n------------------------------------\n")

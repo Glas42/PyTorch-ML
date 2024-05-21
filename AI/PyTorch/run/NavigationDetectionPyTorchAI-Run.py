@@ -1,6 +1,5 @@
+from SDKController import SCSController
 from torchvision import transforms
-import torch.nn.functional as F
-import torch.nn as nn
 import numpy as np
 import bettercam
 import torch
@@ -8,13 +7,9 @@ import time
 import cv2
 import os
 
-from SDKController import SCSController
-controller = SCSController()
-
-# Set device to CUDA if available, otherwise fall back to CPU
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
 camera = bettercam.create(output_color="BGR", output_idx=0)
+controller = SCSController()
 
 lower_red = np.array([0, 0, 160])
 upper_red = np.array([110, 110, 255])
@@ -25,31 +20,15 @@ for file in os.listdir(PATH):
     if file.endswith(".pt"):
         MODEL_PATH = os.path.join(PATH, file)
         break
+if MODEL_PATH == "":
+    print("No model found.")
+    exit()
+
 IMG_WIDTH = 420
 IMG_HEIGHT = 220
 OUTPUTS = 3
 
-class ConvolutionalNeuralNetwork(nn.Module):
-    def __init__(self):
-        super(ConvolutionalNeuralNetwork, self).__init__()
-        self.conv1 = nn.Conv2d(1, 16, 3, padding=1)  # Input channels = 1 for grayscale images
-        self.pool = nn.MaxPool2d(2, 2)
-        self.conv2 = nn.Conv2d(16, 32, 3, padding=1)
-        self.conv3 = nn.Conv2d(32, 64, 3, padding=1)
-        self.fc1 = nn.Linear(64 * 27 * 52, 500)
-        self.fc2 = nn.Linear(500, OUTPUTS)
-
-    def forward(self, x):
-        x = self.pool(F.relu(self.conv1(x)))
-        x = self.pool(F.relu(self.conv2(x)))
-        x = self.pool(F.relu(self.conv3(x)))
-        x = x.view(-1, 64 * 27 * 52)
-        x = F.relu(self.fc1(x))
-        x = self.fc2(x)
-        return x
-
-model = ConvolutionalNeuralNetwork().to(device)
-model.load_state_dict(torch.load(os.path.join(MODEL_PATH), map_location=device))
+model = torch.jit.load(os.path.join(MODEL_PATH))
 model.eval()
 
 transform = transforms.Compose([
