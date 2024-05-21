@@ -52,23 +52,6 @@ transform = transforms.Compose([
     transforms.ToTensor(),
 ])
 
-def preprocess_image(image_input):
-    if isinstance(image_input, str):
-        # If image_input is a file path
-        img = Image.open(image_input).convert('RGB')
-        img = np.array(img)
-    elif isinstance(image_input, np.ndarray):
-        # If image_input is already a numpy array
-        img = image_input
-    else:
-        raise ValueError("Unsupported image input type. Must be a file path or numpy array.")
-    
-    img = cv2.resize(img, (420, 220))
-    img = np.array(img, dtype=np.float32) / 255.0
-    img = transform(img)
-    img = img.unsqueeze(0)
-    return img
-
 cv2.namedWindow('frame', cv2.WINDOW_NORMAL)
 cv2.setWindowProperty('frame', cv2.WND_PROP_TOPMOST, 1)
 cv2.resizeWindow('frame', IMG_WIDTH, IMG_HEIGHT)
@@ -83,28 +66,28 @@ while True:
     cv2.rectangle(frame, (frame.shape[1],0), (round(frame.shape[1]-frame.shape[1]/6),round(frame.shape[0]/3)),(0,0,0),-1)
     frame = cv2.inRange(frame, lower_red, upper_red)
     
-    # Convert single-channel image to three-channel image
-    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_GRAY2RGB)
-    
-    input_tensor = preprocess_image(frame_rgb).to(device)
+    frame = np.array(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+    frame = cv2.resize(frame, (IMG_WIDTH, IMG_HEIGHT))
+    frame = np.array(frame, dtype=np.float32) / 255.0
     
     with torch.no_grad():
-        output = model(input_tensor)
+        output = model(transform(frame).unsqueeze(0).to(device))
         output = output.tolist()
         print(output[0])
 
-    steering = output[0][1] * -100
+    steering = output[0][0] / -30
+    left_indicator = output[0][1]
+    right_indicator = output[0][2]
 
     gamepad.left_joystick_float(x_value_float=steering, y_value_float=0)
     gamepad.update()
 
-    # Convert the frame back to a proper RGB format for display
-    display_frame = frame_rgb * 255
-    display_frame = display_frame.astype(np.uint8)
-
-    cv2.putText(display_frame, f"FPS: {round(1 / (time.time() - start), 1)}", (5, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
+    cv2.putText(frame, f"FPS: {round(1 / (time.time() - start), 1)}", (5, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
+    cv2.putText(frame, f"Steering: {round(steering, 2)}", (5, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
+    cv2.putText(frame, f"Left Indicator: {round(left_indicator, 2)}", (5, 75), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
+    cv2.putText(frame, f"Right Indicator: {round(right_indicator, 2)}", (5, 100), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
     
-    cv2.imshow('frame', display_frame)
+    cv2.imshow('frame', frame)
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
