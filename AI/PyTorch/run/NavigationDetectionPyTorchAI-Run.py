@@ -27,25 +27,28 @@ for file in os.listdir(PATH):
         break
 IMG_WIDTH = 420
 IMG_HEIGHT = 220
+OUTPUTS = 3
 
-class Net(nn.Module):
+class ConvolutionalNeuralNetwork(nn.Module):
     def __init__(self):
-        super(Net, self).__init__()
-        self.conv1 = nn.Conv2d(3, 16, 3, padding=1)
+        super(ConvolutionalNeuralNetwork, self).__init__()
+        self.conv1 = nn.Conv2d(1, 16, 3, padding=1)  # Input channels = 1 for grayscale images
         self.pool = nn.MaxPool2d(2, 2)
         self.conv2 = nn.Conv2d(16, 32, 3, padding=1)
-        self.fc1 = nn.Linear(32 * 55 * 105, 500)
-        self.fc2 = nn.Linear(500, 3)  # Assuming OUTPUTS = 3
+        self.conv3 = nn.Conv2d(32, 64, 3, padding=1)
+        self.fc1 = nn.Linear(64 * 27 * 52, 500)
+        self.fc2 = nn.Linear(500, OUTPUTS)
 
     def forward(self, x):
         x = self.pool(F.relu(self.conv1(x)))
         x = self.pool(F.relu(self.conv2(x)))
-        x = x.view(-1, 32 * 55 * 105)
+        x = self.pool(F.relu(self.conv3(x)))
+        x = x.view(-1, 64 * 27 * 52)
         x = F.relu(self.fc1(x))
         x = self.fc2(x)
         return x
 
-model = Net().to(device)
+model = ConvolutionalNeuralNetwork().to(device)
 model.load_state_dict(torch.load(os.path.join(MODEL_PATH), map_location=device))
 model.eval()
 
@@ -66,11 +69,10 @@ while True:
     cv2.rectangle(frame, (0,0), (round(frame.shape[1]/6),round(frame.shape[0]/3)),(0,0,0),-1)
     cv2.rectangle(frame, (frame.shape[1],0), (round(frame.shape[1]-frame.shape[1]/6),round(frame.shape[0]/3)),(0,0,0),-1)
     frame = cv2.inRange(frame, lower_red, upper_red)
-    
-    frame = np.array(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+    frame = np.array(frame)
     frame = cv2.resize(frame, (IMG_WIDTH, IMG_HEIGHT))
     frame = np.array(frame, dtype=np.float32) / 255.0
-    
+
     with torch.no_grad():
         output = model(transform(frame).unsqueeze(0).to(device))
         output = output.tolist()
@@ -85,10 +87,10 @@ while True:
     controller.lblinker = left_indicator_bool
     controller.rblinker = right_indicator_bool
 
-    cv2.putText(frame, f"FPS: {round(1 / (time.time() - start), 1)}", (5, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 255), 1, cv2.LINE_AA)
-    cv2.putText(frame, f"Steer: {round(steering, 2)}", (5, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 1, cv2.LINE_AA)
-    cv2.putText(frame, f"Left: {round(left_indicator, 2)}", (5, 75), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 1, cv2.LINE_AA)
-    cv2.putText(frame, f"Right: {round(right_indicator, 2)}", (5, 100), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 1, cv2.LINE_AA)
+    cv2.putText(frame, f"FPS: {round(1 / (time.time() - start), 1)}", (5, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
+    cv2.putText(frame, f"Steer: {round(steering, 2)}", (5, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
+    cv2.putText(frame, f"Left: {round(left_indicator, 2)}", (5, 75), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
+    cv2.putText(frame, f"Right: {round(right_indicator, 2)}", (5, 100), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
 
     cv2.imshow('frame', frame)
     if cv2.waitKey(1) & 0xFF == ord('q'):
