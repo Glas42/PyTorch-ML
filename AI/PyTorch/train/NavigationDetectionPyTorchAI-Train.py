@@ -1,12 +1,11 @@
 print("\n------------------------------------\n\nImporting libraries...")
 
-from torchvision.transforms.functional import to_pil_image
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
+import torch.nn.functional as F
 import torch.optim as optim
 import multiprocessing
 import torch.nn as nn
-import torch.nn.functional as F
 from PIL import Image
 import numpy as np
 import datetime
