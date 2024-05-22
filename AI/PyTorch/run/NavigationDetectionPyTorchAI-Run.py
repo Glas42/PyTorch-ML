@@ -1,4 +1,5 @@
 from SDKController import SCSController
+from TruckSimAPI import scsTelemetry
 from torchvision import transforms
 import numpy as np
 import bettercam
@@ -10,6 +11,14 @@ import os
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 camera = bettercam.create(output_color="BGR", output_idx=0)
 controller = SCSController()
+
+API = scsTelemetry()
+data = API.update()
+if data["scsValues"]["telemetryPluginRevision"] < 2:
+    print("TruckSimAPI is waiting for the game...")
+while data["scsValues"]["telemetryPluginRevision"] < 2:
+    time.sleep(0.1)
+    data = API.update()
 
 lower_red = np.array([0, 0, 160])
 upper_red = np.array([110, 110, 255])
@@ -28,7 +37,7 @@ IMG_WIDTH = 420
 IMG_HEIGHT = 220
 OUTPUTS = 3
 
-model = torch.jit.load(os.path.join(MODEL_PATH))
+model = torch.jit.load(os.path.join(MODEL_PATH), map_location=device)
 model.eval()
 
 transform = transforms.Compose([
@@ -45,15 +54,20 @@ while True:
     if frame is None:
         continue
     frame = frame[759:979, 1479:1899]
-    cv2.rectangle(frame, (0,0), (round(frame.shape[1]/6),round(frame.shape[0]/3)),(0,0,0),-1)
-    cv2.rectangle(frame, (frame.shape[1],0), (round(frame.shape[1]-frame.shape[1]/6),round(frame.shape[0]/3)),(0,0,0),-1)
+    cv2.rectangle(frame, (0, 0), (round(frame.shape[1]/6), round(frame.shape[0]/3)), (0, 0, 0), -1)
+    cv2.rectangle(frame, (frame.shape[1], 0), (round(frame.shape[1]-frame.shape[1]/6), round(frame.shape[0]/3)), (0, 0, 0), -1)
     frame = cv2.inRange(frame, lower_red, upper_red)
     frame = np.array(frame)
     frame = cv2.resize(frame, (IMG_WIDTH, IMG_HEIGHT))
     frame = np.array(frame, dtype=np.float32) / 255.0
 
+    data["api"] = API.update()
+    if data["scsValues"]["telemetryPluginRevision"] < 2:
+        print("TruckSimAPI is waiting for the game...")
+        continue
+
     with torch.no_grad():
-        output = model(transform(frame).unsqueeze(0).to(device))
+        output = model(transform(frame).unsqueeze(0).to(device)) # , torch.tensor(data["api"]["truckFloat"]["speedLimit"]).unsqueeze(0).to(device)
         output = output.tolist()
 
     steering = float(output[0][0] / -30)
@@ -61,6 +75,7 @@ while True:
     right_indicator = float(output[0][2])
     left_indicator_bool = bool(left_indicator > 0.3)
     right_indicator_bool = bool(right_indicator > 0.3)
+    #speed = float(output[0][3])
 
     controller.steering = steering
     controller.lblinker = left_indicator_bool
@@ -70,6 +85,7 @@ while True:
     cv2.putText(frame, f"Steer: {round(steering, 2)}", (5, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
     cv2.putText(frame, f"Left: {round(left_indicator, 2)}", (5, 75), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
     cv2.putText(frame, f"Right: {round(right_indicator, 2)}", (5, 100), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
+    #cv2.putText(frame, f"Speed: {round(speed*3.6, 2)}", (5, 125), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
 
     cv2.imshow('frame', frame)
     if cv2.waitKey(1) & 0xFF == ord('q'):
