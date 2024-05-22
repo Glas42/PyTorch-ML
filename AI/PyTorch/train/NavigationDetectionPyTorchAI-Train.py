@@ -21,8 +21,8 @@ MODEL_PATH = PATH + "\\ModelFiles\\Models"
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 IMG_HEIGHT = 220
 IMG_WIDTH = 420
-NUM_EPOCHS = 100
-BATCH_SIZE = 100
+NUM_EPOCHS = 200
+BATCH_SIZE = 200
 OUTPUTS = 3
 
 IMG_COUNT = 0
@@ -186,7 +186,7 @@ def main():
         else:
             wait += 1
             if wait >= patience:
-                print("Early stopping triggered.")
+                print(f"\rEarly stopping at epoch {epoch+1}, Train Loss: {running_loss / len(train_dataloader)}, Val Loss: {val_loss}                       ", end='', flush=True)
                 break
         
         print(f"\rEpoch {epoch+1}, Train Loss: {running_loss / len(train_dataloader)}, Val Loss: {val_loss}, {round((time.time() - update_time) if time.time() - update_time > 1 else (time.time() - update_time) * 1000, 2)}{'s' if time.time() - update_time > 1 else 'ms'}/Epoch, ETA: {time.strftime('%H:%M:%S', time.gmtime(round((time.time() - start_time) / (epoch + 1) * NUM_EPOCHS - (time.time() - start_time), 2)))}                       ", end='', flush=True)
