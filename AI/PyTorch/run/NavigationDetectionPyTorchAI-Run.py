@@ -37,6 +37,24 @@ IMG_WIDTH = 420
 IMG_HEIGHT = 220
 OUTPUTS = 3
 
+string = MODEL_PATH.split("\\")[-1]
+epochs = int(string.split("EPOCHS-")[1].split("_")[0])
+batch = int(string.split("BATCH-")[1].split("_")[0])
+img_width = int(string.split("IMG_WIDTH-")[1].split("_")[0])
+img_height = int(string.split("IMG_HEIGHT-")[1].split("_")[0])
+img_count = int(string.split("IMG_COUNT-")[1].split("_")[0])
+training_time = string.split("TIME-")[1].split("_")[0]
+training_date = string.split("DATE-")[1].split(".")[0]
+
+print(f"\nModel: {MODEL_PATH}")
+print(f"\n> Epochs: {epochs}")
+print(f"> Batch: {batch}")
+print(f"> Image Width: {img_width}")
+print(f"> Image Height: {img_height}")
+print(f"> Image Count: {img_count}")
+print(f"> Training Time: {training_time}")
+print(f"> Training Date: {training_date}\n")
+
 model = torch.jit.load(os.path.join(MODEL_PATH), map_location=device)
 model.eval()
 

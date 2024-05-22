@@ -202,7 +202,7 @@ def main():
     # Save model
     print("Saving model...")
     model = torch.jit.script(model)
-    torch.jit.save(model, os.path.join(MODEL_PATH, f"NavigationDetectionAI-EPOCHS-{epoch+1}_BATCH-{BATCH_SIZE}_IMG_WIDTH-{IMG_WIDTH}_IMG_HEIGHT-{IMG_HEIGHT}_IMG_COUNT-{IMG_COUNT}_TRAININGTIME-{TRAINING_TIME}_DATE-{TRAINING_DATE}.pt"))
+    torch.jit.save(model, os.path.join(MODEL_PATH, f"NavigationDetectionAI-EPOCHS-{epoch+1}_BATCH-{BATCH_SIZE}_IMG_WIDTH-{IMG_WIDTH}_IMG_HEIGHT-{IMG_HEIGHT}_IMG_COUNT-{IMG_COUNT}_TIME-{TRAINING_TIME}_DATE-{TRAINING_DATE}.pt"))
     print("Model saved successfully.")
 
     print("\n------------------------------------\n")
