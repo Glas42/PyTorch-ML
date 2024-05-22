@@ -101,6 +101,7 @@ class ConvolutionalNeuralNetwork(nn.Module):
         self._to_linear = 64 * 52 * 27
         self.fc1 = nn.Linear(self._to_linear, 500)
         self.fc2 = nn.Linear(500, OUTPUTS)
+        self.dropout = nn.Dropout(0.5)
 
     def forward(self, x):
         x = self.pool(F.relu(self.conv1(x)))  # 420x220 -> 210x110
@@ -108,6 +109,7 @@ class ConvolutionalNeuralNetwork(nn.Module):
         x = self.pool(F.relu(self.conv3(x)))  # 105x55 -> 52x27
         x = x.view(-1, self._to_linear)  # Flatten the tensor
         x = F.relu(self.fc1(x))
+        x = self.dropout(x)
         x = self.fc2(x)
         return x
 
@@ -122,22 +124,35 @@ def main():
 
     # Create dataset and dataloader
     dataset = CustomDataset(images, user_inputs, transform=transform)
-    dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=0, pin_memory=True) # num_workers set to 0 to prevent errors
+    dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=0, pin_memory=True)
 
     # Initialize model, loss function, and optimizer
     model = ConvolutionalNeuralNetwork().to(DEVICE)
     criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=0.001)
 
+    # Split the dataset into training and validation sets
+    train_size = int(0.8 * len(dataset))
+    val_size = len(dataset) - train_size
+    train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
+    train_dataloader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=0, pin_memory=True)
+    val_dataloader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=0, pin_memory=True)
+
+    # Early stopping variables
+    best_val_loss = float('inf')
+    patience = 10
+    wait = 0
+
     print("Starting training...")
     print("\n--------------------------------------------------------------\n")
     start_time = time.time()
     update_time = start_time
 
-    # Train model
     for epoch in range(NUM_EPOCHS):
+        # Training phase
+        model.train()
         running_loss = 0.0
-        for i, data in enumerate(dataloader, 0):
+        for i, data in enumerate(train_dataloader, 0):
             inputs, labels = data
             inputs, labels = inputs.to(DEVICE), labels.to(DEVICE)
             
@@ -150,7 +165,31 @@ def main():
             
             running_loss += loss.item()
         
-        print(f"\rEpoch {epoch+1}, Loss: {running_loss / len(dataloader)}, {round((time.time() - update_time) if time.time() - update_time > 1 else (time.time() - update_time) * 1000, 2)}{'s' if time.time() - update_time > 1 else 'ms'}/Epoch, ETA: {time.strftime('%H:%M:%S', time.gmtime(round((time.time() - start_time) / (epoch + 1) * NUM_EPOCHS - (time.time() - start_time), 2)))}                       ", end='', flush=True)
+        # Validation phase
+        model.eval()
+        val_loss = 0.0
+        with torch.no_grad():
+            for i, data in enumerate(val_dataloader, 0):
+                inputs, labels = data
+                inputs, labels = inputs.to(DEVICE), labels.to(DEVICE)
+                
+                outputs = model(inputs)
+                loss = criterion(outputs, labels)
+                val_loss += loss.item()
+        
+        val_loss /= len(val_dataloader)
+        
+        # Early stopping
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            wait = 0
+        else:
+            wait += 1
+            if wait >= patience:
+                print("Early stopping triggered.")
+                break
+        
+        print(f"\rEpoch {epoch+1}, Train Loss: {running_loss / len(train_dataloader)}, Val Loss: {val_loss}, {round((time.time() - update_time) if time.time() - update_time > 1 else (time.time() - update_time) * 1000, 2)}{'s' if time.time() - update_time > 1 else 'ms'}/Epoch, ETA: {time.strftime('%H:%M:%S', time.gmtime(round((time.time() - start_time) / (epoch + 1) * NUM_EPOCHS - (time.time() - start_time), 2)))}                       ", end='', flush=True)
         update_time = time.time()
 
     print("\n\n--------------------------------------------------------------")
@@ -163,7 +202,7 @@ def main():
     # Save model
     print("Saving model...")
     model = torch.jit.script(model)
-    torch.jit.save(model, os.path.join(MODEL_PATH, f"NavigationDetectionAI-EPOCHS-{NUM_EPOCHS}_BATCH-{BATCH_SIZE}_IMG_WIDTH-{IMG_WIDTH}_IMG_HEIGHT-{IMG_HEIGHT}_IMG_COUNT-{IMG_COUNT}_TRAININGTIME-{TRAINING_TIME}_DATE-{TRAINING_DATE}.pt"))
+    torch.jit.save(model, os.path.join(MODEL_PATH, f"NavigationDetectionAI-EPOCHS-{epoch+1}_BATCH-{BATCH_SIZE}_IMG_WIDTH-{IMG_WIDTH}_IMG_HEIGHT-{IMG_HEIGHT}_IMG_COUNT-{IMG_COUNT}_TRAININGTIME-{TRAINING_TIME}_DATE-{TRAINING_DATE}.pt"))
     print("Model saved successfully.")
 
     print("\n------------------------------------\n")

@@ -59,8 +59,8 @@ while True:
     steering = float(output[0][0] / -30)
     left_indicator = float(output[0][1])
     right_indicator = float(output[0][2])
-    left_indicator_bool = bool(left_indicator > 0.5)
-    right_indicator_bool = bool(right_indicator > 0.5)
+    left_indicator_bool = bool(left_indicator > 0.3)
+    right_indicator_bool = bool(right_indicator > 0.3)
 
     controller.steering = steering
     controller.lblinker = left_indicator_bool
