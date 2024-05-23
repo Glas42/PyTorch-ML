@@ -22,7 +22,7 @@ DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 IMG_HEIGHT = 220
 IMG_WIDTH = 420
 NUM_EPOCHS = 200
-BATCH_SIZE = 200
+BATCH_SIZE = 150
 OUTPUTS = 3
 
 IMG_COUNT = 0
@@ -129,7 +129,7 @@ def main():
     # Initialize model, loss function, and optimizer
     model = ConvolutionalNeuralNetwork().to(DEVICE)
     criterion = nn.MSELoss()
-    optimizer = optim.Adam(model.parameters(), lr=0.001)
+    optimizer = optim.Adam(model.parameters(), lr=0.0001)
 
     # Split the dataset into training and validation sets
     train_size = int(0.8 * len(dataset))
@@ -144,7 +144,7 @@ def main():
     wait = 0
 
     print("Starting training...")
-    print("\n--------------------------------------------------------------\n")
+    print("\n--------------------------------------------------------------------------------------------------\n")
     start_time = time.time()
     update_time = start_time
 
@@ -186,13 +186,13 @@ def main():
         else:
             wait += 1
             if wait >= patience:
-                print(f"\rEarly stopping at epoch {epoch+1}, Train Loss: {running_loss / len(train_dataloader)}, Val Loss: {val_loss}                       ", end='', flush=True)
+                print(f"\rEarly stopping at Epoch {epoch+1}, Train Loss: {running_loss / len(train_dataloader)}, Val Loss: {val_loss}                       ", end='', flush=True)
                 break
         
         print(f"\rEpoch {epoch+1}, Train Loss: {running_loss / len(train_dataloader)}, Val Loss: {val_loss}, {round((time.time() - update_time) if time.time() - update_time > 1 else (time.time() - update_time) * 1000, 2)}{'s' if time.time() - update_time > 1 else 'ms'}/Epoch, ETA: {time.strftime('%H:%M:%S', time.gmtime(round((time.time() - start_time) / (epoch + 1) * NUM_EPOCHS - (time.time() - start_time), 2)))}                       ", end='', flush=True)
         update_time = time.time()
 
-    print("\n\n--------------------------------------------------------------")
+    print("\n\n--------------------------------------------------------------------------------------------------")
 
     TRAINING_TIME = time.strftime('%H-%M-%S', time.gmtime(time.time() - start_time))
     TRAINING_DATE = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
