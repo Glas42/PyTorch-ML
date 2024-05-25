@@ -24,6 +24,8 @@ IMG_WIDTH = 420
 NUM_EPOCHS = 200
 BATCH_SIZE = 150
 OUTPUTS = 3
+DROPOUT = 0.5
+TRAIN_VAL_RATIO = 0.8
 
 IMG_COUNT = 0
 for file in os.listdir(DATA_PATH):
@@ -39,6 +41,8 @@ print("\nTraining settings:")
 print("> Epochs:", NUM_EPOCHS)
 print("> Batch size:", BATCH_SIZE)
 print("> Output size:", OUTPUTS)
+print("> Dropout:", DROPOUT)
+print("> Dataset split:", TRAIN_VAL_RATIO)
 print("> Image width:", IMG_WIDTH)
 print("> Image height:", IMG_HEIGHT)
 print("> Images:", IMG_COUNT)
@@ -101,7 +105,7 @@ class ConvolutionalNeuralNetwork(nn.Module):
         self._to_linear = 64 * 52 * 27
         self.fc1 = nn.Linear(self._to_linear, 500)
         self.fc2 = nn.Linear(500, OUTPUTS)
-        self.dropout = nn.Dropout(0.5)
+        self.dropout = nn.Dropout(DROPOUT)
 
     def forward(self, x):
         x = self.pool(F.relu(self.conv1(x)))  # 420x220 -> 210x110
@@ -132,7 +136,7 @@ def main():
     optimizer = optim.Adam(model.parameters(), lr=0.0001)
 
     # Split the dataset into training and validation sets
-    train_size = int(0.8 * len(dataset))
+    train_size = int(TRAIN_VAL_RATIO * len(dataset))
     val_size = len(dataset) - train_size
     train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
     train_dataloader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=0, pin_memory=True)
