@@ -148,7 +148,7 @@ def main():
     wait = 0
 
     print("Starting training...")
-    print("\n--------------------------------------------------------------------------------------------------\n")
+    print("\n------------------------------------------------------------------------------------------------------\n")
     start_time = time.time()
     update_time = start_time
 
@@ -196,7 +196,7 @@ def main():
         print(f"\rEpoch {epoch+1}, Train Loss: {running_loss / len(train_dataloader)}, Val Loss: {val_loss}, {round((time.time() - update_time) if time.time() - update_time > 1 else (time.time() - update_time) * 1000, 2)}{'s' if time.time() - update_time > 1 else 'ms'}/Epoch, ETA: {time.strftime('%H:%M:%S', time.gmtime(round((time.time() - start_time) / (epoch + 1) * NUM_EPOCHS - (time.time() - start_time), 2)))}                       ", end='', flush=True)
         update_time = time.time()
 
-    print("\n\n--------------------------------------------------------------------------------------------------")
+    print("\n\n------------------------------------------------------------------------------------------------------")
 
     TRAINING_TIME = time.strftime('%H-%M-%S', time.gmtime(time.time() - start_time))
     TRAINING_DATE = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
