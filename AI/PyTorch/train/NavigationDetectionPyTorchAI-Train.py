@@ -24,8 +24,13 @@ IMG_WIDTH = 420
 NUM_EPOCHS = 200
 BATCH_SIZE = 150
 OUTPUTS = 3
+PATIENCE = 10
 DROPOUT = 0.5
+LEARNING_RATE = 0.0001
 TRAIN_VAL_RATIO = 0.8
+PIN_MEMORY = True
+NUM_WORKERS = 0
+SHUFFLE = True
 
 IMG_COUNT = 0
 for file in os.listdir(DATA_PATH):
@@ -71,7 +76,7 @@ def load_data():
                 user_inputs.append(user_input)
             else:
                 pass
-    
+
     return np.array(images, dtype=np.float32), np.array(user_inputs, dtype=np.float32)  # Convert to float32
 
 # Custom dataset class
@@ -126,25 +131,25 @@ def main():
         transforms.ToTensor(),
     ])
 
-    # Create dataset and dataloader
+    # Create dataset
     dataset = CustomDataset(images, user_inputs, transform=transform)
-    dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=0, pin_memory=True)
 
     # Initialize model, loss function, and optimizer
     model = ConvolutionalNeuralNetwork().to(DEVICE)
     criterion = nn.MSELoss()
-    optimizer = optim.Adam(model.parameters(), lr=0.0001)
+    optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
     # Split the dataset into training and validation sets
     train_size = int(TRAIN_VAL_RATIO * len(dataset))
     val_size = len(dataset) - train_size
     train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
-    train_dataloader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=0, pin_memory=True)
-    val_dataloader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=0, pin_memory=True)
+    train_dataloader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=SHUFFLE, num_workers=NUM_WORKERS, pin_memory=PIN_MEMORY)
+    val_dataloader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=SHUFFLE, num_workers=NUM_WORKERS, pin_memory=PIN_MEMORY)
 
     # Early stopping variables
     best_val_loss = float('inf')
-    patience = 10
+    best_model = None
+    best_model_epoch = None
     wait = 0
 
     print("Starting training...")
@@ -159,16 +164,16 @@ def main():
         for i, data in enumerate(train_dataloader, 0):
             inputs, labels = data
             inputs, labels = inputs.to(DEVICE), labels.to(DEVICE)
-            
+
             optimizer.zero_grad()
-            
+
             outputs = model(inputs)
             loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
             
             running_loss += loss.item()
-        
+
         # Validation phase
         model.eval()
         val_loss = 0.0
@@ -176,23 +181,25 @@ def main():
             for i, data in enumerate(val_dataloader, 0):
                 inputs, labels = data
                 inputs, labels = inputs.to(DEVICE), labels.to(DEVICE)
-                
+
                 outputs = model(inputs)
                 loss = criterion(outputs, labels)
                 val_loss += loss.item()
-        
+
         val_loss /= len(val_dataloader)
-        
+
         # Early stopping
         if val_loss < best_val_loss:
             best_val_loss = val_loss
+            best_model = model
+            best_model_epoch = epoch
             wait = 0
         else:
             wait += 1
-            if wait >= patience:
+            if wait >= PATIENCE:
                 print(f"\rEarly stopping at Epoch {epoch+1}, Train Loss: {running_loss / len(train_dataloader)}, Val Loss: {val_loss}                       ", end='', flush=True)
                 break
-        
+
         print(f"\rEpoch {epoch+1}, Train Loss: {running_loss / len(train_dataloader)}, Val Loss: {val_loss}, {round((time.time() - update_time) if time.time() - update_time > 1 else (time.time() - update_time) * 1000, 2)}{'s' if time.time() - update_time > 1 else 'ms'}/Epoch, ETA: {time.strftime('%H:%M:%S', time.gmtime(round((time.time() - start_time) / (epoch + 1) * NUM_EPOCHS - (time.time() - start_time), 2)))}                       ", end='', flush=True)
         update_time = time.time()
 
@@ -203,11 +210,17 @@ def main():
 
     print(f"\nTraining completed after " + TRAINING_TIME.replace('-', ':'))
 
-    # Save model
-    print("Saving model...")
+    # Save the last model
+    print("Saving the last model...")
     model = torch.jit.script(model)
-    torch.jit.save(model, os.path.join(MODEL_PATH, f"NavigationDetectionAI-EPOCHS-{epoch+1}_BATCH-{BATCH_SIZE}_IMG_WIDTH-{IMG_WIDTH}_IMG_HEIGHT-{IMG_HEIGHT}_IMG_COUNT-{IMG_COUNT}_TIME-{TRAINING_TIME}_DATE-{TRAINING_DATE}.pt"))
-    print("Model saved successfully.")
+    torch.jit.save(model, os.path.join(MODEL_PATH, f"NavigationDetectionAI-LAST_EPOCHS-{epoch+1}_BATCH-{BATCH_SIZE}_IMG_WIDTH-{IMG_WIDTH}_IMG_HEIGHT-{IMG_HEIGHT}_IMG_COUNT-{IMG_COUNT}_TIME-{TRAINING_TIME}_DATE-{TRAINING_DATE}.pt"))
+
+    # Save the best model
+    print("Saving the best model...")
+    best_model = torch.jit.script(best_model)
+    torch.jit.save(best_model, os.path.join(MODEL_PATH, f"NavigationDetectionAI-BEST_EPOCHS-{best_model_epoch+1}_BATCH-{BATCH_SIZE}_IMG_WIDTH-{IMG_WIDTH}_IMG_HEIGHT-{IMG_HEIGHT}_IMG_COUNT-{IMG_COUNT}_TIME-{TRAINING_TIME}_DATE-{TRAINING_DATE}.pt"))
+
+    print("Models saved successfully.")
 
     print("\n------------------------------------\n")
 
