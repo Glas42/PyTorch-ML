@@ -48,6 +48,11 @@ print("> Batch size:", BATCH_SIZE)
 print("> Output size:", OUTPUTS)
 print("> Dropout:", DROPOUT)
 print("> Dataset split:", TRAIN_VAL_RATIO)
+print("> Learning rate:", LEARNING_RATE)
+print("> Number of workers:", NUM_WORKERS)
+print("> Shuffle:", SHUFFLE)
+print("> Patience:", PATIENCE)
+print("> Pin memory:", PIN_MEMORY)
 print("> Image width:", IMG_WIDTH)
 print("> Image height:", IMG_HEIGHT)
 print("> Images:", IMG_COUNT)
@@ -212,15 +217,29 @@ def main():
 
     # Save the last model
     print("Saving the last model...")
-    model = torch.jit.script(model)
-    torch.jit.save(model, os.path.join(MODEL_PATH, f"NavigationDetectionAI-LAST_EPOCHS-{epoch+1}_BATCH-{BATCH_SIZE}_IMG_WIDTH-{IMG_WIDTH}_IMG_HEIGHT-{IMG_HEIGHT}_IMG_COUNT-{IMG_COUNT}_TIME-{TRAINING_TIME}_DATE-{TRAINING_DATE}.pt"))
+    last_model_saved = False
+    for i in range(5):
+        try:
+            last_model = torch.jit.script(model)
+            torch.jit.save(last_model, os.path.join(MODEL_PATH, f"NavigationDetectionAI-LAST_EPOCHS-{epoch+1}_BATCH-{BATCH_SIZE}_IMG_WIDTH-{IMG_WIDTH}_IMG_HEIGHT-{IMG_HEIGHT}_IMG_COUNT-{IMG_COUNT}_TIME-{TRAINING_TIME}_DATE-{TRAINING_DATE}.pt"))
+            last_model_saved = True
+            break
+        except:
+            print("Failed to save the last model. Retrying...")
+    print("Last model saved successfully.") if last_model_saved else print("Failed to save the last model.")
 
     # Save the best model
     print("Saving the best model...")
-    best_model = torch.jit.script(best_model)
-    torch.jit.save(best_model, os.path.join(MODEL_PATH, f"NavigationDetectionAI-BEST_EPOCHS-{best_model_epoch+1}_BATCH-{BATCH_SIZE}_IMG_WIDTH-{IMG_WIDTH}_IMG_HEIGHT-{IMG_HEIGHT}_IMG_COUNT-{IMG_COUNT}_TIME-{TRAINING_TIME}_DATE-{TRAINING_DATE}.pt"))
-
-    print("Models saved successfully.")
+    best_model_saved = False
+    for i in range(5):
+        try:
+            best_model = torch.jit.script(best_model)
+            torch.jit.save(best_model, os.path.join(MODEL_PATH, f"NavigationDetectionAI-BEST_EPOCHS-{best_model_epoch+1}_BATCH-{BATCH_SIZE}_IMG_WIDTH-{IMG_WIDTH}_IMG_HEIGHT-{IMG_HEIGHT}_IMG_COUNT-{IMG_COUNT}_TIME-{TRAINING_TIME}_DATE-{TRAINING_DATE}.pt"))
+            best_model_saved = True
+            break
+        except:
+            print("Failed to save the best model. Retrying...")
+    print("Best model saved successfully.") if best_model_saved else print("Failed to save the best model.")
 
     print("\n------------------------------------\n")
 
