@@ -5,3 +5,6 @@
 /ModelFiles/Models/*
 /ModelFiles/TrainingData/*
 /ModelFiles/EditedTrainingData/*
+
+# ignore the tensorboard logs
+/AI/PyTorch/logs

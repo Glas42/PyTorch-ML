@@ -1,6 +1,10 @@
 import datetime
 print(f"\n------------------------------------\n\n\033[90m[{datetime.datetime.now().strftime('%H:%M:%S')}] \033[0mImporting libraries...")
 
+import os
+os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
+
+from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
 import torch.nn.functional as F
@@ -12,7 +16,6 @@ import numpy as np
 import torch
 import time
 import cv2
-import os
 
 # Constants
 PATH = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
@@ -24,13 +27,14 @@ IMG_WIDTH = 420
 NUM_EPOCHS = 200
 BATCH_SIZE = 200
 OUTPUTS = 3
-PATIENCE = 10
 DROPOUT = 0.5
 LEARNING_RATE = 0.0001
 TRAIN_VAL_RATIO = 0.8
-PIN_MEMORY = True
 NUM_WORKERS = 0
 SHUFFLE = True
+USE_FP16 = False
+PATIENCE = 10
+PIN_MEMORY = True
 
 IMG_COUNT = 0
 for file in os.listdir(DATA_PATH):
@@ -58,6 +62,7 @@ print(timestamp() + "> Dataset split:", TRAIN_VAL_RATIO)
 print(timestamp() + "> Learning rate:", LEARNING_RATE)
 print(timestamp() + "> Number of workers:", NUM_WORKERS)
 print(timestamp() + "> Shuffle:", SHUFFLE)
+print(timestamp() + "> Use FP16:", USE_FP16)
 print(timestamp() + "> Patience:", PATIENCE)
 print(timestamp() + "> Pin memory:", PIN_MEMORY)
 print(timestamp() + "> Image width:", IMG_WIDTH)
@@ -76,7 +81,7 @@ def load_data():
             img = Image.open(os.path.join(DATA_PATH, file)).convert('L')  # Convert to grayscale
             img = np.array(img)
             img = cv2.resize(img, (IMG_WIDTH, IMG_HEIGHT))
-            img = np.array(img, dtype=np.float32) / 255.0  # Convert to float32
+            img = np.array(img, dtype=np.float16 if USE_FP16 else np.float32) / 255.0  # Convert to float16 or float32
 
             user_inputs_file = os.path.join(DATA_PATH, file.replace(".png", ".txt"))
             if os.path.exists(user_inputs_file):
@@ -89,7 +94,7 @@ def load_data():
             else:
                 pass
 
-    return np.array(images, dtype=np.float32), np.array(user_inputs, dtype=np.float32)  # Convert to float32
+    return np.array(images, dtype=np.float16 if USE_FP16 else np.float32), np.array(user_inputs, dtype=np.float16 if USE_FP16 else np.float32)  # Convert to float16 or float32
 
 # Custom dataset class
 class CustomDataset(Dataset):
@@ -107,9 +112,9 @@ class CustomDataset(Dataset):
         if self.transform:
             image = self.transform(image)
         else:
-            image = torch.tensor(image, dtype=torch.float32).unsqueeze(0)
+            image = torch.tensor(image, dtype=torch.float16 if USE_FP16 else torch.float32).unsqueeze(0)
             print(timestamp() + "Warning: No transformation applied to image.")
-        return image, torch.tensor(user_input, dtype=torch.float32)
+        return image, torch.tensor(user_input, dtype=torch.float16 if USE_FP16 else torch.float32)
 
 # Define the model
 class ConvolutionalNeuralNetwork(nn.Module):
@@ -148,6 +153,8 @@ def main():
 
     # Initialize model, loss function, and optimizer
     model = ConvolutionalNeuralNetwork().to(DEVICE)
+    if USE_FP16:
+        model = model.half()  # Convert the model to use 16-bit float format
     criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
@@ -163,6 +170,9 @@ def main():
     best_model = None
     best_model_epoch = None
     wait = 0
+
+    # Tensorboard setup
+    summary_writer = SummaryWriter(f"{PATH}/AI/PyTorch/logs", comment="NavigationDetectionPyTorchAI-Train", flush_secs=20)
 
     print(timestamp() + "Starting training...")
     print("\n------------------------------------------------------------------------------------------------------\n")
@@ -211,6 +221,12 @@ def main():
             if wait >= PATIENCE:
                 print(f"\rEarly stopping at Epoch {epoch+1}, Train Loss: {running_loss / len(train_dataloader)}, Val Loss: {val_loss}                       ", end='', flush=True)
                 break
+
+        # Log values to Tensorboard
+        summary_writer.add_scalars(f'Loss', {
+            'train': running_loss / len(train_dataloader),
+            'validation': val_loss,
+        }, epoch)
 
         print(f"\rEpoch {epoch+1}, Train Loss: {running_loss / len(train_dataloader)}, Val Loss: {val_loss}, {round((time.time() - update_time) if time.time() - update_time > 1 else (time.time() - update_time) * 1000, 2)}{'s' if time.time() - update_time > 1 else 'ms'}/Epoch, ETA: {time.strftime('%H:%M:%S', time.gmtime(round((time.time() - start_time) / (epoch + 1) * NUM_EPOCHS - (time.time() - start_time), 2)))}                       ", end='', flush=True)
         update_time = time.time()
