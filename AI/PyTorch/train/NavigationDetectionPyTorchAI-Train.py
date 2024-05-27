@@ -1,4 +1,5 @@
-print("\n------------------------------------\n\nImporting libraries...")
+import datetime
+print(f"\n------------------------------------\n\n\033[90m[{datetime.datetime.now().strftime('%H:%M:%S')}] \033[0mImporting libraries...")
 
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
@@ -8,7 +9,6 @@ import multiprocessing
 import torch.nn as nn
 from PIL import Image
 import numpy as np
-import datetime
 import torch
 import time
 import cv2
@@ -22,7 +22,7 @@ DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 IMG_HEIGHT = 220
 IMG_WIDTH = 420
 NUM_EPOCHS = 200
-BATCH_SIZE = 150
+BATCH_SIZE = 200
 OUTPUTS = 3
 PATIENCE = 10
 DROPOUT = 0.5
@@ -37,29 +37,36 @@ for file in os.listdir(DATA_PATH):
     if file.endswith(".png"):
         IMG_COUNT += 1
 
-print("\n------------------------------------\n")
-
-print(f"Using {str(DEVICE).upper()} for training")
-print('Number of CPU cores:', multiprocessing.cpu_count())
-
-print("\nTraining settings:")
-print("> Epochs:", NUM_EPOCHS)
-print("> Batch size:", BATCH_SIZE)
-print("> Output size:", OUTPUTS)
-print("> Dropout:", DROPOUT)
-print("> Dataset split:", TRAIN_VAL_RATIO)
-print("> Learning rate:", LEARNING_RATE)
-print("> Number of workers:", NUM_WORKERS)
-print("> Shuffle:", SHUFFLE)
-print("> Patience:", PATIENCE)
-print("> Pin memory:", PIN_MEMORY)
-print("> Image width:", IMG_WIDTH)
-print("> Image height:", IMG_HEIGHT)
-print("> Images:", IMG_COUNT)
+RED = "\033[91m"
+GREEN = "\033[92m"
+DARK_GREY = "\033[90m"
+NORMAL = "\033[0m"
+def timestamp():
+    return DARK_GREY + f"[{datetime.datetime.now().strftime('%H:%M:%S')}] " + NORMAL
 
 print("\n------------------------------------\n")
 
-print("Loading...")
+print(timestamp() + f"Using {str(DEVICE).upper()} for training")
+print(timestamp() + 'Number of CPU cores:', multiprocessing.cpu_count())
+print()
+print(timestamp() + "Training settings:")
+print(timestamp() + "> Epochs:", NUM_EPOCHS)
+print(timestamp() + "> Batch size:", BATCH_SIZE)
+print(timestamp() + "> Output size:", OUTPUTS)
+print(timestamp() + "> Dropout:", DROPOUT)
+print(timestamp() + "> Dataset split:", TRAIN_VAL_RATIO)
+print(timestamp() + "> Learning rate:", LEARNING_RATE)
+print(timestamp() + "> Number of workers:", NUM_WORKERS)
+print(timestamp() + "> Shuffle:", SHUFFLE)
+print(timestamp() + "> Patience:", PATIENCE)
+print(timestamp() + "> Pin memory:", PIN_MEMORY)
+print(timestamp() + "> Image width:", IMG_WIDTH)
+print(timestamp() + "> Image height:", IMG_HEIGHT)
+print(timestamp() + "> Images:", IMG_COUNT)
+
+print("\n------------------------------------\n")
+
+print(timestamp() + "Loading...")
 
 def load_data(): 
     images = []
@@ -101,7 +108,7 @@ class CustomDataset(Dataset):
             image = self.transform(image)
         else:
             image = torch.tensor(image, dtype=torch.float32).unsqueeze(0)
-            print("Warning: No transformation applied to image.")
+            print(timestamp() + "Warning: No transformation applied to image.")
         return image, torch.tensor(user_input, dtype=torch.float32)
 
 # Define the model
@@ -157,7 +164,7 @@ def main():
     best_model_epoch = None
     wait = 0
 
-    print("Starting training...")
+    print(timestamp() + "Starting training...")
     print("\n------------------------------------------------------------------------------------------------------\n")
     start_time = time.time()
     update_time = start_time
@@ -213,10 +220,11 @@ def main():
     TRAINING_TIME = time.strftime('%H-%M-%S', time.gmtime(time.time() - start_time))
     TRAINING_DATE = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
 
-    print(f"\nTraining completed after " + TRAINING_TIME.replace('-', ':'))
+    print()
+    print(timestamp() + f"Training completed after " + TRAINING_TIME.replace('-', ':'))
 
     # Save the last model
-    print("Saving the last model...")
+    print(timestamp() + "Saving the last model...")
     last_model_saved = False
     for i in range(5):
         try:
@@ -225,11 +233,11 @@ def main():
             last_model_saved = True
             break
         except:
-            print("Failed to save the last model. Retrying...")
-    print("Last model saved successfully.") if last_model_saved else print("Failed to save the last model.")
+            print(timestamp() + "Failed to save the last model. Retrying...")
+    print(timestamp() + "Last model saved successfully.") if last_model_saved else print(timestamp() + "Failed to save the last model.")
 
     # Save the best model
-    print("Saving the best model...")
+    print(timestamp() + "Saving the best model...")
     best_model_saved = False
     for i in range(5):
         try:
@@ -238,8 +246,8 @@ def main():
             best_model_saved = True
             break
         except:
-            print("Failed to save the best model. Retrying...")
-    print("Best model saved successfully.") if best_model_saved else print("Failed to save the best model.")
+            print(timestamp() + "Failed to save the best model. Retrying...")
+    print(timestamp() + "Best model saved successfully.") if best_model_saved else print(timestamp() + "Failed to save the best model.")
 
     print("\n------------------------------------\n")
 

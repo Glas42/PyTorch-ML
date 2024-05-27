@@ -95,7 +95,7 @@ while True:
     right_indicator_bool = bool(right_indicator > 0.3)
     #speed = float(output[0][3])
 
-    controller.steering = steering
+    controller.steering = steering * 0.65
     controller.lblinker = left_indicator_bool
     controller.rblinker = right_indicator_bool
 
