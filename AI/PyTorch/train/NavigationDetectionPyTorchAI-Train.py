@@ -13,6 +13,7 @@ import multiprocessing
 import torch.nn as nn
 from PIL import Image
 import numpy as np
+import shutil
 import torch
 import time
 import cv2
@@ -22,8 +23,8 @@ PATH = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)
 DATA_PATH = PATH + "\\ModelFiles\\EditedTrainingData"
 MODEL_PATH = PATH + "\\ModelFiles\\Models"
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-IMG_HEIGHT = 220
 IMG_WIDTH = 420
+IMG_HEIGHT = 220
 NUM_EPOCHS = 200
 BATCH_SIZE = 200
 OUTPUTS = 3
@@ -170,6 +171,17 @@ def main():
     best_model = None
     best_model_epoch = None
     wait = 0
+
+    # Create tensorboard logs folder if it doesn't exist
+    if not os.path.exists(f"{PATH}/AI/PyTorch/logs"): 
+        os.makedirs(f"{PATH}/AI/PyTorch/logs")
+
+    # Delete previous tensorboard logs
+    for obj in os.listdir(f"{PATH}/AI/PyTorch/logs"):
+        try:
+            shutil.rmtree(f"{PATH}/AI/PyTorch/logs/{obj}")
+        except:
+            os.remove(f"{PATH}/AI/PyTorch/logs/{obj}")
 
     # Tensorboard setup
     summary_writer = SummaryWriter(f"{PATH}/AI/PyTorch/logs", comment="NavigationDetectionPyTorchAI-Train", flush_secs=20)
