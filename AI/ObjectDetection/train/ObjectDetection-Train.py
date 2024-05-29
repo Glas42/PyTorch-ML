@@ -76,32 +76,35 @@ print(timestamp() + "Loading...")
 
 def load_data(): 
     images = []
-    user_inputs = []
+    inputs = []
     for file in os.listdir(DATA_PATH):
         if file.endswith(".png"):
             img = Image.open(os.path.join(DATA_PATH, file)).convert('L')  # Convert to grayscale
             img = np.array(img)
             img = cv2.resize(img, (IMG_WIDTH, IMG_HEIGHT))
-            img = np.array(img, dtype=np.float16 if USE_FP16 else np.float32) / 255.0  # Convert to float16 or float32
 
-            user_inputs_file = os.path.join(DATA_PATH, file.replace(".png", ".txt"))
-            if os.path.exists(user_inputs_file):
-                with open(user_inputs_file, 'r') as f:
+            input_file = os.path.join(DATA_PATH, file.replace(".png", ".txt"))
+            if os.path.exists(input_file):
+                with open(input_file, 'r') as f:
                     content = str(f.read()).split(',')
-                    steering, left_indicator, right_indicator = float(content[0]), 1 if str(content[1]) == 'True' else 0, 1 if str(content[2]) == 'True' else 0
-                    user_input = [steering, left_indicator, right_indicator]
+                    obj_x1 = float(content[0])
+                    obj_y1 = float(content[1])
+                    obj_x2 = float(content[2])
+                    obj_y2 = float(content[3])
+                    obj_class = int(1 if str(content[4]) == 'Green' else 2 if str(content[4]) == 'Yellow' else 3)
+                    input = [obj_x1, obj_y1, obj_x2, obj_y2, obj_class]
                 images.append(img)
-                user_inputs.append(user_input)
+                inputs.append(input)
             else:
                 pass
 
-    return np.array(images, dtype=np.float16 if USE_FP16 else np.float32), np.array(user_inputs, dtype=np.float16 if USE_FP16 else np.float32)  # Convert to float16 or float32
+    return np.array(images, dtype=np.float16 if USE_FP16 else np.float32), np.array(inputs, dtype=np.float16 if USE_FP16 else np.float32)  # Convert to float16 or float32
 
 # Custom dataset class
 class CustomDataset(Dataset):
-    def __init__(self, images, user_inputs, transform=None):
+    def __init__(self, images, inputs, transform=None):
         self.images = images
-        self.user_inputs = user_inputs
+        self.inputs = inputs
         self.transform = transform
 
     def __len__(self):
@@ -109,13 +112,13 @@ class CustomDataset(Dataset):
 
     def __getitem__(self, idx):
         image = self.images[idx]
-        user_input = self.user_inputs[idx]
+        input = self.inputs[idx]
         if self.transform:
             image = self.transform(image)
         else:
             image = torch.tensor(image, dtype=torch.float16 if USE_FP16 else torch.float32).unsqueeze(0)
             print(timestamp() + "Warning: No transformation applied to image.")
-        return image, torch.tensor(user_input, dtype=torch.float16 if USE_FP16 else torch.float32)
+        return image, torch.tensor(input, dtype=torch.float16 if USE_FP16 else torch.float32)
 
 # Define the model
 class ConvolutionalNeuralNetwork(nn.Module):
@@ -142,7 +145,7 @@ class ConvolutionalNeuralNetwork(nn.Module):
 
 def main():
     # Load data
-    images, user_inputs = load_data()
+    images, inputs = load_data()
 
     # Transformations
     transform = transforms.Compose([
@@ -150,7 +153,7 @@ def main():
     ])
 
     # Create dataset
-    dataset = CustomDataset(images, user_inputs, transform=transform)
+    dataset = CustomDataset(images, inputs, transform=transform)
 
     # Initialize model, loss function, and optimizer
     model = ConvolutionalNeuralNetwork().to(DEVICE)
@@ -173,18 +176,18 @@ def main():
     wait = 0
 
     # Create tensorboard logs folder if it doesn't exist
-    if not os.path.exists(f"{PATH}/AI/PyTorch/logs"): 
-        os.makedirs(f"{PATH}/AI/PyTorch/logs")
+    if not os.path.exists(f"{PATH}/AI/ObjectDetection/logs"): 
+        os.makedirs(f"{PATH}/AI/ObjectDetection/logs")
 
     # Delete previous tensorboard logs
-    for obj in os.listdir(f"{PATH}/AI/PyTorch/logs"):
+    for obj in os.listdir(f"{PATH}/AI/ObjectDetection/logs"):
         try:
-            shutil.rmtree(f"{PATH}/AI/PyTorch/logs/{obj}")
+            shutil.rmtree(f"{PATH}/AI/ObjectDetection/logs/{obj}")
         except:
-            os.remove(f"{PATH}/AI/PyTorch/logs/{obj}")
+            os.remove(f"{PATH}/AI/ObjectDetection/logs/{obj}")
 
     # Tensorboard setup
-    summary_writer = SummaryWriter(f"{PATH}/AI/PyTorch/logs", comment="NavigationDetectionPyTorchAI-Train", flush_secs=20)
+    summary_writer = SummaryWriter(f"{PATH}/AI/ObjectDetection/logs", comment="ObjectDetection-Training", flush_secs=20)
 
     print(timestamp() + "Starting training...")
     print("\n------------------------------------------------------------------------------------------------------\n")
@@ -257,7 +260,7 @@ def main():
     for i in range(5):
         try:
             last_model = torch.jit.script(model)
-            torch.jit.save(last_model, os.path.join(MODEL_PATH, f"NavigationDetectionAI-LAST_EPOCHS-{epoch+1}_BATCH-{BATCH_SIZE}_IMG_WIDTH-{IMG_WIDTH}_IMG_HEIGHT-{IMG_HEIGHT}_IMG_COUNT-{IMG_COUNT}_TIME-{TRAINING_TIME}_DATE-{TRAINING_DATE}.pt"))
+            torch.jit.save(last_model, os.path.join(MODEL_PATH, f"ObjectDetectionModel-LAST_EPOCHS-{epoch+1}_BATCH-{BATCH_SIZE}_IMG_WIDTH-{IMG_WIDTH}_IMG_HEIGHT-{IMG_HEIGHT}_IMG_COUNT-{IMG_COUNT}_TIME-{TRAINING_TIME}_DATE-{TRAINING_DATE}.pt"))
             last_model_saved = True
             break
         except:
@@ -270,7 +273,7 @@ def main():
     for i in range(5):
         try:
             best_model = torch.jit.script(best_model)
-            torch.jit.save(best_model, os.path.join(MODEL_PATH, f"NavigationDetectionAI-BEST_EPOCHS-{best_model_epoch+1}_BATCH-{BATCH_SIZE}_IMG_WIDTH-{IMG_WIDTH}_IMG_HEIGHT-{IMG_HEIGHT}_IMG_COUNT-{IMG_COUNT}_TIME-{TRAINING_TIME}_DATE-{TRAINING_DATE}.pt"))
+            torch.jit.save(best_model, os.path.join(MODEL_PATH, f"ObjectDetectionModel-BEST_EPOCHS-{best_model_epoch+1}_BATCH-{BATCH_SIZE}_IMG_WIDTH-{IMG_WIDTH}_IMG_HEIGHT-{IMG_HEIGHT}_IMG_COUNT-{IMG_COUNT}_TIME-{TRAINING_TIME}_DATE-{TRAINING_DATE}.pt"))
             best_model_saved = True
             break
         except:

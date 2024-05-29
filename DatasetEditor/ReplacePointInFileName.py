@@ -1,6 +1,6 @@
 import os
 
-directory = r"C:\GitHub\NavigationDetectionAI\ModelFiles\TrainingData"
+directory = os.path.dirname(os.path.dirname(__file__)) + "\\ModelFiles\\TrainingData"
 count = len(os.listdir(directory))
 curCount = 0
 

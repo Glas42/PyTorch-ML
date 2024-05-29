@@ -1,5 +1,3 @@
-from SDKController import SCSController
-from TruckSimAPI import scsTelemetry
 from torchvision import transforms
 import numpy as np
 import bettercam
@@ -10,15 +8,6 @@ import os
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 camera = bettercam.create(output_color="BGR", output_idx=0)
-controller = SCSController()
-
-API = scsTelemetry()
-data = API.update()
-if data["scsValues"]["telemetryPluginRevision"] < 2:
-    print("TruckSimAPI is waiting for the game...")
-while data["scsValues"]["telemetryPluginRevision"] < 2:
-    time.sleep(0.1)
-    data = API.update()
 
 lower_red = np.array([0, 0, 160])
 upper_red = np.array([110, 110, 255])
@@ -71,43 +60,25 @@ while True:
     frame = camera.grab()
     if frame is None:
         continue
-    frame = frame[759:979, 1479:1899]
-    cv2.rectangle(frame, (0, 0), (round(frame.shape[1]/6), round(frame.shape[0]/3)), (0, 0, 0), -1)
-    cv2.rectangle(frame, (frame.shape[1], 0), (round(frame.shape[1]-frame.shape[1]/6), round(frame.shape[0]/3)), (0, 0, 0), -1)
-    frame = cv2.inRange(frame, lower_red, upper_red)
+    width = frame.shape[1]
+    height = frame.shape[0]
     frame = np.array(frame)
     frame = cv2.resize(frame, (IMG_WIDTH, IMG_HEIGHT))
-    frame = np.array(frame, dtype=np.float32) / 255.0
-
-    data["api"] = API.update()
-    if data["scsValues"]["telemetryPluginRevision"] < 2:
-        print("TruckSimAPI is waiting for the game...")
-        continue
+    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
     with torch.no_grad():
-        output = model(transform(frame).unsqueeze(0).to(device)) # , torch.tensor(data["api"]["truckFloat"]["speedLimit"]).unsqueeze(0).to(device)
+        output = model(transform(frame).unsqueeze(0).to(device))
         output = output.tolist()
 
-    steering = float(output[0][0] / -30)
-    left_indicator = float(output[0][1])
-    right_indicator = float(output[0][2])
-    left_indicator_bool = bool(left_indicator > 0.3)
-    right_indicator_bool = bool(right_indicator > 0.3)
-    #speed = float(output[0][3])
+    obj_x1, obj_y1, obj_x2, obj_y2, obj_class = output[0][0], output[0][1], output[0][2], output[0][3], "Green" if int(output[0][4]) == 1 else ("Yellow" if int(output[0][4]) == 2 else "Red")
 
-    controller.steering = steering * 0.65
-    controller.lblinker = left_indicator_bool
-    controller.rblinker = right_indicator_bool
+    print(f"X1: {obj_x1 * width}, Y1: {obj_y1 * height}, X2: {obj_x2 * width}, Y2: {obj_y2 * height}, Class: {obj_class}")
+
+    cv2.rectangle(frame, (int(obj_x1 * width), int(obj_y1 * height)), (int(obj_x2 * width), int(obj_y2 * height)), (255, 255, 255), 2, cv2.LINE_AA)
 
     cv2.putText(frame, f"FPS: {round(1 / (time.time() - start), 1)}", (5, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
-    cv2.putText(frame, f"Steer: {round(steering, 2)}", (5, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
-    cv2.putText(frame, f"Left: {round(left_indicator, 2)}", (5, 75), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
-    cv2.putText(frame, f"Right: {round(right_indicator, 2)}", (5, 100), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
-    #cv2.putText(frame, f"Speed: {round(speed*3.6, 2)}", (5, 125), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
-
     cv2.imshow('frame', frame)
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
 cv2.destroyAllWindows()
-controller.close()
