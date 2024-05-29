@@ -7,4 +7,5 @@
 /ModelFiles/EditedTrainingData/*
 
 # ignore the tensorboard logs
-/AI/PyTorch/logs
+/AI/Regression/logs
+/AI/ObjectDetection/logs
