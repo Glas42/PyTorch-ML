@@ -9,9 +9,6 @@ import os
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 camera = bettercam.create(output_color="BGR", output_idx=0)
 
-lower_red = np.array([0, 0, 160])
-upper_red = np.array([110, 110, 255])
-
 PATH = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))) + "\\ModelFiles\\Models"
 MODEL_PATH = ""
 for file in os.listdir(PATH):
@@ -60,28 +57,17 @@ while True:
     frame = camera.grab()
     if frame is None:
         continue
-    width = frame.shape[1]
-    height = frame.shape[0]
+
     frame = np.array(frame)
     frame = cv2.resize(frame, (IMG_WIDTH, IMG_HEIGHT))
-    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    frame = np.array(frame, dtype=np.float32)
 
     with torch.no_grad():
-        rpn_cls_output, rpn_reg_output, detection_output = model(transform(frame).unsqueeze(0).to(device))
-
-    # Extract the bounding box coordinates and class labels
-    for i in range(detection_output.size(1)):
-        obj_data = detection_output[0, i]
-        obj_x1, obj_y1, obj_x2, obj_y2 = obj_data[:4]
-        obj_class = obj_data[4]
-
-        print(f"{obj_x1},{obj_y1},{obj_x2},{obj_y2},{obj_class}")
-
-        cv2.rectangle(frame, (int(obj_x1 * width), int(obj_y1 * height)), (int(obj_x2 * width), int(obj_y2 * height)), (255, 255, 255), 2, cv2.LINE_AA)
+        output = model(transform(frame).unsqueeze(0).to(device))
 
     cv2.putText(frame, f"FPS: {round(1 / (time.time() - start), 1)}", (5, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
-    cv2.imshow('frame', frame)
 
+    cv2.imshow('frame', frame)
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
