@@ -20,14 +20,13 @@ import cv2
 
 # Constants
 PATH = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-DATA_PATH = PATH + "\ModelFiles\EditedTrainingData"
-MODEL_PATH = PATH + "\ModelFiles\Models"
+DATA_PATH = PATH + "\\ModelFiles\\EditedTrainingData"
+MODEL_PATH = PATH + "\\ModelFiles\\Models"
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-IMG_WIDTH = 640
-IMG_HEIGHT = 640
+IMG_WIDTH = 420
+IMG_HEIGHT = 220
 NUM_EPOCHS = 200
-BATCH_SIZE = 10
-NUM_CLASSES = 3
+BATCH_SIZE = 200
 OUTPUTS = 5
 DROPOUT = 0.5
 LEARNING_RATE = 0.0001
@@ -83,7 +82,6 @@ def load_data():
             img = Image.open(os.path.join(DATA_PATH, file)).convert('L')  # Convert to grayscale
             img = np.array(img)
             img = cv2.resize(img, (IMG_WIDTH, IMG_HEIGHT))
-            img = np.array(img, dtype=np.float16 if USE_FP16 else np.float32) / 255.0  # Convert to float16 or float32
 
             target_file = os.path.join(DATA_PATH, file.replace(".png", ".txt"))
             if os.path.exists(target_file):
@@ -120,71 +118,30 @@ class CustomDataset(Dataset):
         else:
             image = torch.tensor(image, dtype=torch.float16 if USE_FP16 else torch.float32).unsqueeze(0)
             print(timestamp() + "Warning: No transformation applied to image.")
-        target = torch.tensor(target, dtype=torch.float16 if USE_FP16 else torch.float32)
-        return image, target
+        return image, torch.tensor(target, dtype=torch.float16 if USE_FP16 else torch.float32)
 
-# SSD model components
-class BasicConv(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size, stride, padding):
-        super(BasicConv, self).__init__()
-        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding)
-        self.relu = nn.ReLU(inplace=True)
+# Define the model
+class ConvolutionalNeuralNetwork(nn.Module):
+    def __init__(self):
+        super(ConvolutionalNeuralNetwork, self).__init__()
+        self.conv1 = nn.Conv2d(1, 16, 3, padding=1)  # Input channels = 1 for grayscale images
+        self.pool = nn.MaxPool2d(2, 2)
+        self.conv2 = nn.Conv2d(16, 32, 3, padding=1)
+        self.conv3 = nn.Conv2d(32, 64, 3, padding=1)
+        self._to_linear = 64 * 52 * 27
+        self.fc1 = nn.Linear(self._to_linear, 500)
+        self.fc2 = nn.Linear(500, OUTPUTS)
+        self.dropout = nn.Dropout(DROPOUT)
 
     def forward(self, x):
-        x = self.conv(x)
-        x = self.relu(x)
+        x = self.pool(F.relu(self.conv1(x)))  # 420x220 -> 210x110
+        x = self.pool(F.relu(self.conv2(x)))  # 210x110 -> 105x55
+        x = self.pool(F.relu(self.conv3(x)))  # 105x55 -> 52x27
+        x = x.view(-1, self._to_linear)  # Flatten the tensor
+        x = F.relu(self.fc1(x))
+        x = self.dropout(x)
+        x = self.fc2(x)
         return x
-
-class SSD(nn.Module):
-    def __init__(self, num_classes):
-        super(SSD, self).__init__()
-        self.num_classes = num_classes
-
-        self.conv1 = BasicConv(1, 64, kernel_size=3, stride=1, padding=1)  # Adjusted for single channel input
-        self.conv2 = BasicConv(64, 128, kernel_size=3, stride=2, padding=1)
-        self.conv3 = BasicConv(128, 256, kernel_size=3, stride=2, padding=1)
-        self.conv4 = BasicConv(256, 512, kernel_size=3, stride=2, padding=1)
-        self.conv5 = BasicConv(512, 512, kernel_size=3, stride=2, padding=1)
-        self.conv6 = BasicConv(512, 256, kernel_size=3, stride=2, padding=1)
-
-        self.loc = nn.Conv2d(256, 4 * 4, kernel_size=3, padding=1)
-        self.conf = nn.Conv2d(256, 4 * num_classes, kernel_size=3, padding=1)
-
-    def forward(self, x):
-        x = self.conv1(x)
-        x = self.conv2(x)
-        x = self.conv3(x)
-        x = self.conv4(x)
-        x = self.conv5(x)
-        x = self.conv6(x)
-
-        loc = self.loc(x).permute(0, 2, 3, 1).contiguous()
-        conf = self.conf(x).permute(0, 2, 3, 1).contiguous()
-
-        loc = loc.view(loc.size(0), -1, 4)
-        conf = conf.view(conf.size(0), -1, self.num_classes)
-        
-        return loc, conf
-
-def collate_fn(batch):
-    images = [item[0] for item in batch]
-    targets = [item[1] for item in batch]
-    images = torch.stack(images, dim=0)
-    
-    loc_targets = []
-    conf_targets = []
-    for target in targets:
-        loc_target = torch.zeros(1600, 4)  # Create a tensor of zeros with shape [1600, 4]
-        loc_target[:target.shape[0], :] = target[:4]  # Copy the values from target to loc_target
-        loc_targets.append(loc_target)
-        conf_target = torch.zeros(1600, dtype=torch.long)  # Create a tensor of zeros with shape [1600]
-        conf_target[:target.shape[0]] = target[4]  # Copy the values from target to conf_target
-        conf_targets.append(conf_target)
-
-    loc_targets = torch.stack(loc_targets, dim=0)
-    conf_targets = torch.stack(conf_targets, dim=0)
-    
-    return images, (loc_targets, conf_targets)
 
 def main():
     # Load data
@@ -199,29 +156,27 @@ def main():
     dataset = CustomDataset(images, targets, transform=transform)
 
     # Initialize model, loss function, and optimizer
-    model = SSD(num_classes=NUM_CLASSES).to(DEVICE)
+    model = ConvolutionalNeuralNetwork().to(DEVICE)
     if USE_FP16:
-        model = model.half()
-
-    loc_criterion = nn.SmoothL1Loss()
-    conf_criterion = nn.CrossEntropyLoss()
+        model = model.half()  # Convert the model to use 16-bit float format
+    criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
     # Split the dataset into training and validation sets
     train_size = int(TRAIN_VAL_RATIO * len(dataset))
     val_size = len(dataset) - train_size
     train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
-    train_dataloader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=SHUFFLE, num_workers=NUM_WORKERS, pin_memory=PIN_MEMORY, collate_fn=collate_fn)
-    val_dataloader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=SHUFFLE, num_workers=NUM_WORKERS, pin_memory=PIN_MEMORY, collate_fn=collate_fn)
+    train_dataloader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=SHUFFLE, num_workers=NUM_WORKERS, pin_memory=PIN_MEMORY)
+    val_dataloader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=SHUFFLE, num_workers=NUM_WORKERS, pin_memory=PIN_MEMORY)
 
     # Early stopping variables
     best_val_loss = float('inf')
     best_model = None
     best_model_epoch = None
     wait = 0
- 
+
     # Create tensorboard logs folder if it doesn't exist
-    if not os.path.exists(f"{PATH}/AI/ObjectDetection/logs"):
+    if not os.path.exists(f"{PATH}/AI/ObjectDetection/logs"): 
         os.makedirs(f"{PATH}/AI/ObjectDetection/logs")
 
     # Delete previous tensorboard logs
@@ -239,21 +194,18 @@ def main():
     start_time = time.time()
     update_time = start_time
 
-    # Training and Validation Loops
     for epoch in range(NUM_EPOCHS):
         # Training phase
         model.train()
         running_loss = 0.0
         for i, data in enumerate(train_dataloader, 0):
             inputs, labels = data
-            inputs, (loc_labels, conf_labels) = inputs.to(DEVICE), (labels[0].to(DEVICE), labels[1].to(DEVICE))
+            inputs, labels = inputs.to(DEVICE), labels.to(DEVICE)
 
             optimizer.zero_grad()
 
             outputs = model(inputs)
-            loc_loss = loc_criterion(outputs[0], loc_labels)
-            conf_loss = conf_criterion(outputs[1].view(-1, NUM_CLASSES), conf_labels.view(-1))
-            loss = loc_loss + conf_loss
+            loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
             
@@ -265,12 +217,10 @@ def main():
         with torch.no_grad():
             for i, data in enumerate(val_dataloader, 0):
                 inputs, labels = data
-                inputs, (loc_labels, conf_labels) = inputs.to(DEVICE), (labels[0].to(DEVICE), labels[1].to(DEVICE))
+                inputs, labels = inputs.to(DEVICE), labels.to(DEVICE)
 
                 outputs = model(inputs)
-                loc_loss = loc_criterion(outputs[0], loc_labels)
-                conf_loss = conf_criterion(outputs[1].view(-1, NUM_CLASSES), conf_labels.view(-1))
-                loss = loc_loss + conf_loss
+                loss = criterion(outputs, labels)
                 val_loss += loss.item()
 
         val_loss /= len(val_dataloader)

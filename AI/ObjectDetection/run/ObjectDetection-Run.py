@@ -19,8 +19,8 @@ if MODEL_PATH == "":
     print("No model found.")
     exit()
 
-IMG_WIDTH = 640
-IMG_HEIGHT = 640
+IMG_WIDTH = 420
+IMG_HEIGHT = 220
 OUTPUTS = 5
 
 string = MODEL_PATH.split("\\")[-1]
@@ -61,22 +61,12 @@ while True:
     frame = np.array(frame)
     frame = cv2.resize(frame, (IMG_WIDTH, IMG_HEIGHT))
     frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    frame = np.array(frame, dtype=np.float32) / 255.0
 
     with torch.no_grad():
-        loc, conf = model(transform(frame).unsqueeze(0).to(device))
+        output = model(transform(frame).unsqueeze(0).to(device))
 
-    # Extract the relevant values from the output
-    bounding_boxes = loc[0]
-    class_scores = conf[0]
-
-    # Iterate over the bounding boxes and class scores
-    for i in range(bounding_boxes.size(0)):
-        obj_x1, obj_y1, obj_x2, obj_y2 = bounding_boxes[i]
-        obj_class = class_scores[i].argmax().item()
-        if obj_class == 1:
-            print(f"{'Green' if obj_class == 0 else 'Yellow' if obj_class == 1 else 'Red' if obj_class == 2 else 'None'}: {obj_x1}, {obj_y1}, {obj_x2}, {obj_y2} - {class_scores[i].max().item()}")
-        cv2.rectangle(frame, (int(obj_x1 * frame.shape[1]), int(obj_y1 * frame.shape[0])), (int(obj_x2 * frame.shape[1]), int(obj_y2 * frame.shape[0])), (255, 255, 255), 2)
+    obj_x1, obj_y1, obj_x2, obj_y2, obj_class = output[0].tolist()
+    cv2.rectangle(frame, (int(obj_x1 * frame.shape[1]), int(obj_y1 * frame.shape[0])), (int(obj_x2 * frame.shape[1]), int(obj_y2 * frame.shape[0])), (255, 255, 255), 2)
 
     cv2.putText(frame, f"FPS: {round(1 / (time.time() - start), 1)}", (5, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
 
