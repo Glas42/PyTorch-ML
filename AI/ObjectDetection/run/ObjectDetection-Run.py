@@ -65,7 +65,9 @@ while True:
     with torch.no_grad():
         output = model(transform(frame).unsqueeze(0).to(device))
 
-    obj_x1, obj_y1, obj_x2, obj_y2, obj_class = output[0].tolist()
+    obj_x1, obj_y1, obj_x2, obj_y2, obj_present, obj_class = output[0].tolist()
+    print(f"{obj_class}: {obj_present}")
+
     cv2.rectangle(frame, (int(obj_x1 * frame.shape[1]), int(obj_y1 * frame.shape[0])), (int(obj_x2 * frame.shape[1]), int(obj_y2 * frame.shape[0])), (255, 255, 255), 2)
 
     cv2.putText(frame, f"FPS: {round(1 / (time.time() - start), 1)}", (5, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1, cv2.LINE_AA)

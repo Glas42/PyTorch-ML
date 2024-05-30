@@ -92,7 +92,8 @@ def load_data():
                     obj_x2 = float(content[2])
                     obj_y2 = float(content[3])
                     obj_class = int(0 if str(content[4]) == 'Green' else 1 if str(content[4]) == 'Yellow' else 2 if str(content[4]) == 'Red' else 2)
-                    target = [obj_x1, obj_y1, obj_x2, obj_y2, obj_class]
+                    obj_present = 1.0 if obj_class != 2 else 0.0  # 1.0 if object is present, 0.0 if not present
+                    target = [obj_x1, obj_y1, obj_x2, obj_y2, obj_present, obj_class]
                 images.append(img)
                 targets.append(target)
             else:
@@ -130,7 +131,7 @@ class ConvolutionalNeuralNetwork(nn.Module):
         self.conv3 = nn.Conv2d(32, 64, 3, padding=1)
         self._to_linear = 64 * 52 * 27
         self.fc1 = nn.Linear(self._to_linear, 500)
-        self.fc2 = nn.Linear(500, OUTPUTS)
+        self.fc2 = nn.Linear(500, 6)  # Output size = 6 (4 bounding box coords + 1 object + 1 class)
         self.dropout = nn.Dropout(DROPOUT)
 
     def forward(self, x):
@@ -142,6 +143,24 @@ class ConvolutionalNeuralNetwork(nn.Module):
         x = self.dropout(x)
         x = self.fc2(x)
         return x
+
+class WeightedMSELoss(nn.Module):
+    def __init__(self, bbox_weight=1.0, obj_weight=1.0, class_weight=1.0):
+        super(WeightedMSELoss, self).__init__()
+        self.bbox_weight = bbox_weight
+        self.obj_weight = obj_weight
+        self.class_weight = class_weight
+
+    def forward(self, outputs, targets):
+        if outputs.dim() == 1:
+            bbox_loss = F.mse_loss(outputs[:4], targets[:4], reduction='mean')
+            obj_loss = F.mse_loss(outputs[4], targets[4], reduction='mean')
+            class_loss = F.mse_loss(outputs[5], targets[5], reduction='mean')
+        else:
+            bbox_loss = F.mse_loss(outputs[:, :4], targets[:, :4], reduction='mean')
+            obj_loss = F.mse_loss(outputs[:, 4], targets[:, 4], reduction='mean')
+            class_loss = F.mse_loss(outputs[:, 5], targets[:, 5], reduction='mean')
+        return self.bbox_weight * bbox_loss, self.obj_weight * obj_loss, self.class_weight * class_loss
 
 def main():
     # Load data
@@ -159,7 +178,7 @@ def main():
     model = ConvolutionalNeuralNetwork().to(DEVICE)
     if USE_FP16:
         model = model.half()  # Convert the model to use 16-bit float format
-    criterion = nn.MSELoss()
+    criterion = WeightedMSELoss(bbox_weight=100.0, obj_weight=1.0, class_weight=1.0)
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
     # Split the dataset into training and validation sets
@@ -176,7 +195,7 @@ def main():
     wait = 0
 
     # Create tensorboard logs folder if it doesn't exist
-    if not os.path.exists(f"{PATH}/AI/ObjectDetection/logs"): 
+    if not os.path.exists(f"{PATH}/AI/ObjectDetection/logs"):
         os.makedirs(f"{PATH}/AI/ObjectDetection/logs")
 
     # Delete previous tensorboard logs
@@ -198,6 +217,9 @@ def main():
         # Training phase
         model.train()
         running_loss = 0.0
+        running_bbox_loss = 0.0
+        running_obj_loss = 0.0
+        running_class_loss = 0.0
         for i, data in enumerate(train_dataloader, 0):
             inputs, labels = data
             inputs, labels = inputs.to(DEVICE), labels.to(DEVICE)
@@ -205,25 +227,38 @@ def main():
             optimizer.zero_grad()
 
             outputs = model(inputs)
-            loss = criterion(outputs, labels)
+            bbox_loss, obj_loss, class_loss = criterion(outputs, labels)
+            loss = bbox_loss + obj_loss + class_loss
             loss.backward()
             optimizer.step()
-            
+
             running_loss += loss.item()
+            running_bbox_loss += bbox_loss.item()
+            running_obj_loss += obj_loss.item()
+            running_class_loss += class_loss.item()
 
         # Validation phase
         model.eval()
         val_loss = 0.0
+        val_bbox_loss = 0.0
+        val_obj_loss = 0.0
+        val_class_loss = 0.0
         with torch.no_grad():
             for i, data in enumerate(val_dataloader, 0):
                 inputs, labels = data
                 inputs, labels = inputs.to(DEVICE), labels.to(DEVICE)
 
                 outputs = model(inputs)
-                loss = criterion(outputs, labels)
-                val_loss += loss.item()
+                bbox_loss, obj_loss, class_loss = criterion(outputs, labels)
+                val_loss += (bbox_loss + obj_loss + class_loss).item()
+                val_bbox_loss += bbox_loss.item()
+                val_obj_loss += obj_loss.item()
+                val_class_loss += class_loss.item()
 
         val_loss /= len(val_dataloader)
+        val_bbox_loss /= len(val_dataloader)
+        val_obj_loss /= len(val_dataloader)
+        val_class_loss /= len(val_dataloader)
 
         # Early stopping
         if val_loss < best_val_loss:
@@ -241,6 +276,12 @@ def main():
         summary_writer.add_scalars(f'Loss', {
             'train': running_loss / len(train_dataloader),
             'validation': val_loss,
+            'train_bbox': running_bbox_loss / len(train_dataloader),
+            'train_obj': running_obj_loss / len(train_dataloader),
+            'train_class': running_class_loss / len(train_dataloader),
+            'val_bbox': val_bbox_loss,
+            'val_obj': val_obj_loss,
+            'val_class': val_class_loss,
         }, epoch)
 
         print(f"\rEpoch {epoch+1}, Train Loss: {running_loss / len(train_dataloader)}, Val Loss: {val_loss}, {round((time.time() - update_time) if time.time() - update_time > 1 else (time.time() - update_time) * 1000, 2)}{'s' if time.time() - update_time > 1 else 'ms'}/Epoch, ETA: {time.strftime('%H:%M:%S', time.gmtime(round((time.time() - start_time) / (epoch + 1) * NUM_EPOCHS - (time.time() - start_time), 2)))}                       ", end='', flush=True)
