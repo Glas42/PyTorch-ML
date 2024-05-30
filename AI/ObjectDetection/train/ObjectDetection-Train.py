@@ -20,14 +20,14 @@ import cv2
 
 # Constants
 PATH = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-DATA_PATH = PATH + "\\ModelFiles\\EditedTrainingData"
-MODEL_PATH = PATH + "\\ModelFiles\\Models"
+DATA_PATH = PATH + "\ModelFiles\EditedTrainingData"
+MODEL_PATH = PATH + "\ModelFiles\Models"
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-IMG_WIDTH = 420
-IMG_HEIGHT = 220
+IMG_WIDTH = 640
+IMG_HEIGHT = 640
 NUM_EPOCHS = 200
-BATCH_SIZE = 200
-OUTPUTS = 3
+BATCH_SIZE = 32
+OUTPUTS = 5
 DROPOUT = 0.5
 LEARNING_RATE = 0.0001
 TRAIN_VAL_RATIO = 0.8
@@ -74,7 +74,7 @@ print("\n------------------------------------\n")
 
 print(timestamp() + "Loading...")
 
-def load_data(): 
+def load_data():
     images = []
     targets = []
     for file in os.listdir(DATA_PATH):
@@ -122,26 +122,48 @@ class CustomDataset(Dataset):
         return image, torch.tensor(target, dtype=torch.float16 if USE_FP16 else torch.float32)
 
 # Define the model
+class Conv(nn.Module):
+    # Standard convolution layer with BatchNorm and SiLU
+    def __init__(self, c1, c2, k=1, s=1, p=None, g=1, act=True):
+        super(Conv, self).__init__()
+        self.conv = nn.Conv2d(c1, c2, k, s, autopad(k, p), groups=g, bias=False)
+        self.bn = nn.BatchNorm2d(c2)
+        self.act = nn.SiLU() if act else nn.Identity()
+
+    def forward(self, x):
+        return self.act(self.bn(self.conv(x)))
+
+def autopad(k, p=None):  # Pad to 'same'
+    # Pad to 'same'
+    if p is None:
+        p = k // 2 if isinstance(k, int) else [x // 2 for x in k]  # auto-pad
+    return p
+
 class ConvolutionalNeuralNetwork(nn.Module):
     def __init__(self):
         super(ConvolutionalNeuralNetwork, self).__init__()
-        self.conv1 = nn.Conv2d(1, 16, 3, padding=1)  # Input channels = 1 for grayscale images
-        self.pool = nn.MaxPool2d(2, 2)
-        self.conv2 = nn.Conv2d(16, 32, 3, padding=1)
-        self.conv3 = nn.Conv2d(32, 64, 3, padding=1)
-        self._to_linear = 64 * 52 * 27
-        self.fc1 = nn.Linear(self._to_linear, 500)
-        self.fc2 = nn.Linear(500, OUTPUTS)
-        self.dropout = nn.Dropout(DROPOUT)
+        self.conv1 = Conv(1, 16, 3, 1)
+        self.conv2 = Conv(16, 32, 3, 2)
+        self.conv3 = Conv(32, 64, 3, 2)
+        self.conv4 = Conv(64, 128, 3, 2)
+        self.conv5 = Conv(128, 256, 3, 2)
+        self.conv6 = Conv(256, 512, 3, 2)
+        self.conv7 = Conv(512, 1024, 3, 2)
+        
+        # Update the input size of the fully connected layer based on the identified dimensions
+        self._to_linear = 1024 * (IMG_WIDTH // 64) * (IMG_HEIGHT // 64)  # 1024 * 10 * 10 = 102400
+        self.fc = nn.Linear(self._to_linear, OUTPUTS)
 
     def forward(self, x):
-        x = self.pool(F.relu(self.conv1(x)))  # 420x220 -> 210x110
-        x = self.pool(F.relu(self.conv2(x)))  # 210x110 -> 105x55
-        x = self.pool(F.relu(self.conv3(x)))  # 105x55 -> 52x27
-        x = x.view(-1, self._to_linear)  # Flatten the tensor
-        x = F.relu(self.fc1(x))
-        x = self.dropout(x)
-        x = self.fc2(x)
+        x = self.conv1(x)
+        x = self.conv2(x)
+        x = self.conv3(x)
+        x = self.conv4(x)
+        x = self.conv5(x)
+        x = self.conv6(x)
+        x = self.conv7(x)
+        x = x.view(x.size(0), -1)
+        x = self.fc(x)
         return x
 
 def main():
@@ -177,18 +199,18 @@ def main():
     wait = 0
 
     # Create tensorboard logs folder if it doesn't exist
-    if not os.path.exists(f"{PATH}/AI/Regression/logs"): 
-        os.makedirs(f"{PATH}/AI/Regression/logs")
+    if not os.path.exists(f"{PATH}/AI/ObjectDetection/logs"):
+        os.makedirs(f"{PATH}/AI/ObjectDetection/logs")
 
     # Delete previous tensorboard logs
-    for obj in os.listdir(f"{PATH}/AI/Regression/logs"):
+    for obj in os.listdir(f"{PATH}/AI/ObjectDetection/logs"):
         try:
-            shutil.rmtree(f"{PATH}/AI/Regression/logs/{obj}")
+            shutil.rmtree(f"{PATH}/AI/ObjectDetection/logs/{obj}")
         except:
-            os.remove(f"{PATH}/AI/Regression/logs/{obj}")
+            os.remove(f"{PATH}/AI/ObjectDetection/logs/{obj}")
 
     # Tensorboard setup
-    summary_writer = SummaryWriter(f"{PATH}/AI/Regression/logs", comment="Regression-Training", flush_secs=20)
+    summary_writer = SummaryWriter(f"{PATH}/AI/ObjectDetection/logs", comment="ObjectDetection-Training", flush_secs=20)
 
     print(timestamp() + "Starting training...")
     print("\n------------------------------------------------------------------------------------------------------\n")
@@ -261,7 +283,7 @@ def main():
     for i in range(5):
         try:
             last_model = torch.jit.script(model)
-            torch.jit.save(last_model, os.path.join(MODEL_PATH, f"RegressionModel-LAST_EPOCHS-{epoch+1}_BATCH-{BATCH_SIZE}_IMG_WIDTH-{IMG_WIDTH}_IMG_HEIGHT-{IMG_HEIGHT}_IMG_COUNT-{IMG_COUNT}_TIME-{TRAINING_TIME}_DATE-{TRAINING_DATE}.pt"))
+            torch.jit.save(last_model, os.path.join(MODEL_PATH, f"ObjectDetectionModel-LAST_EPOCHS-{epoch+1}_BATCH-{BATCH_SIZE}_IMG_WIDTH-{IMG_WIDTH}_IMG_HEIGHT-{IMG_HEIGHT}_IMG_COUNT-{IMG_COUNT}_TIME-{TRAINING_TIME}_DATE-{TRAINING_DATE}.pt"))
             last_model_saved = True
             break
         except:
@@ -274,7 +296,7 @@ def main():
     for i in range(5):
         try:
             best_model = torch.jit.script(best_model)
-            torch.jit.save(best_model, os.path.join(MODEL_PATH, f"RegressionModel-BEST_EPOCHS-{best_model_epoch+1}_BATCH-{BATCH_SIZE}_IMG_WIDTH-{IMG_WIDTH}_IMG_HEIGHT-{IMG_HEIGHT}_IMG_COUNT-{IMG_COUNT}_TIME-{TRAINING_TIME}_DATE-{TRAINING_DATE}.pt"))
+            torch.jit.save(best_model, os.path.join(MODEL_PATH, f"ObjectDetectionModel-BEST_EPOCHS-{best_model_epoch+1}_BATCH-{BATCH_SIZE}_IMG_WIDTH-{IMG_WIDTH}_IMG_HEIGHT-{IMG_HEIGHT}_IMG_COUNT-{IMG_COUNT}_TIME-{TRAINING_TIME}_DATE-{TRAINING_DATE}.pt"))
             best_model_saved = True
             break
         except:

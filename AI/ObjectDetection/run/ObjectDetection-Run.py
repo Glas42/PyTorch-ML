@@ -19,9 +19,9 @@ if MODEL_PATH == "":
     print("No model found.")
     exit()
 
-IMG_WIDTH = 420
-IMG_HEIGHT = 220
-OUTPUTS = 3
+IMG_WIDTH = 640
+IMG_HEIGHT = 640
+OUTPUTS = 5
 
 string = MODEL_PATH.split("\\")[-1]
 epochs = int(string.split("EPOCHS-")[1].split("_")[0])
@@ -60,10 +60,14 @@ while True:
 
     frame = np.array(frame)
     frame = cv2.resize(frame, (IMG_WIDTH, IMG_HEIGHT))
-    frame = np.array(frame, dtype=np.float32)
+    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    frame = np.array(frame, dtype=np.float32) / 255.0
 
     with torch.no_grad():
         output = model(transform(frame).unsqueeze(0).to(device))
+
+    obj_x1, obj_y1, obj_x2, obj_y2, obj_class = output[0].tolist()
+    cv2.rectangle(frame, (int(obj_x1 * frame.shape[1]), int(obj_y1 * frame.shape[0])), (int(obj_x2 * frame.shape[1]), int(obj_y2 * frame.shape[0])), (255, 255, 255), 2)
 
     cv2.putText(frame, f"FPS: {round(1 / (time.time() - start), 1)}", (5, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
 
