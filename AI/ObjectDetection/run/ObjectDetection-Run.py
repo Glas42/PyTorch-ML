@@ -67,17 +67,21 @@ while True:
     frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
     with torch.no_grad():
-        output = model(transform(frame).unsqueeze(0).to(device))
-        output = output.tolist()
+        rpn_cls_output, rpn_reg_output, detection_output = model(transform(frame).unsqueeze(0).to(device))
 
-    obj_x1, obj_y1, obj_x2, obj_y2, obj_class = output[0][0], output[0][1], output[0][2], output[0][3], "Green" if int(output[0][4]) == 1 else ("Yellow" if int(output[0][4]) == 2 else "Red")
+    # Extract the bounding box coordinates and class labels
+    for i in range(detection_output.size(1)):
+        obj_data = detection_output[0, i]
+        obj_x1, obj_y1, obj_x2, obj_y2 = obj_data[:4]
+        obj_class = obj_data[4]
 
-    print(f"X1: {obj_x1 * width}, Y1: {obj_y1 * height}, X2: {obj_x2 * width}, Y2: {obj_y2 * height}, Class: {obj_class}")
+        print(f"{obj_x1},{obj_y1},{obj_x2},{obj_y2},{obj_class}")
 
-    cv2.rectangle(frame, (int(obj_x1 * width), int(obj_y1 * height)), (int(obj_x2 * width), int(obj_y2 * height)), (255, 255, 255), 2, cv2.LINE_AA)
+        cv2.rectangle(frame, (int(obj_x1 * width), int(obj_y1 * height)), (int(obj_x2 * width), int(obj_y2 * height)), (255, 255, 255), 2, cv2.LINE_AA)
 
     cv2.putText(frame, f"FPS: {round(1 / (time.time() - start), 1)}", (5, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
     cv2.imshow('frame', frame)
+
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 

@@ -13,6 +13,7 @@ import multiprocessing
 import torch.nn as nn
 from PIL import Image
 import numpy as np
+import traceback
 import shutil
 import torch
 import time
@@ -26,8 +27,10 @@ DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 IMG_WIDTH = 420
 IMG_HEIGHT = 220
 NUM_EPOCHS = 200
-BATCH_SIZE = 200
-OUTPUTS = 3
+BATCH_SIZE = 75
+NUM_CLASSES = 3
+NUM_BBOX = 1
+BBOX_COORDS = 4
 DROPOUT = 0.5
 LEARNING_RATE = 0.0001
 TRAIN_VAL_RATIO = 0.8
@@ -57,7 +60,9 @@ print()
 print(timestamp() + "Training settings:")
 print(timestamp() + "> Epochs:", NUM_EPOCHS)
 print(timestamp() + "> Batch size:", BATCH_SIZE)
-print(timestamp() + "> Output size:", OUTPUTS)
+print(timestamp() + "> Number of classes:", NUM_CLASSES)
+print(timestamp() + "> Number of bounding boxes per image:", NUM_BBOX)
+print(timestamp() + "> Bounding box coordinates:", BBOX_COORDS)
 print(timestamp() + "> Dropout:", DROPOUT)
 print(timestamp() + "> Dataset split:", TRAIN_VAL_RATIO)
 print(timestamp() + "> Learning rate:", LEARNING_RATE)
@@ -76,35 +81,35 @@ print(timestamp() + "Loading...")
 
 def load_data(): 
     images = []
-    inputs = []
+    targets = []
     for file in os.listdir(DATA_PATH):
         if file.endswith(".png"):
             img = Image.open(os.path.join(DATA_PATH, file)).convert('L')  # Convert to grayscale
             img = np.array(img)
             img = cv2.resize(img, (IMG_WIDTH, IMG_HEIGHT))
 
-            input_file = os.path.join(DATA_PATH, file.replace(".png", ".txt"))
-            if os.path.exists(input_file):
-                with open(input_file, 'r') as f:
+            target_file = os.path.join(DATA_PATH, file.replace(".png", ".txt"))
+            if os.path.exists(target_file):
+                with open(target_file, 'r') as f:
                     content = str(f.read()).split(',')
                     obj_x1 = float(content[0])
                     obj_y1 = float(content[1])
                     obj_x2 = float(content[2])
                     obj_y2 = float(content[3])
-                    obj_class = int(1 if str(content[4]) == 'Green' else 2 if str(content[4]) == 'Yellow' else 3)
-                    input = [obj_x1, obj_y1, obj_x2, obj_y2, obj_class]
+                    obj_class = int(1 if str(content[4]) == 'Green' else 2 if str(content[4]) == 'Yellow' else 3 if str(content[4]) == 'Red' else 0)
+                    target = [obj_x1, obj_y1, obj_x2, obj_y2, obj_class]
                 images.append(img)
-                inputs.append(input)
+                targets.append(target)
             else:
                 pass
 
-    return np.array(images, dtype=np.float16 if USE_FP16 else np.float32), np.array(inputs, dtype=np.float16 if USE_FP16 else np.float32)  # Convert to float16 or float32
+    return np.array(images, dtype=np.float16 if USE_FP16 else np.float32), np.array(targets, dtype=np.float16 if USE_FP16 else np.float32)  # Convert to float16 or float32
 
 # Custom dataset class
 class CustomDataset(Dataset):
-    def __init__(self, images, inputs, transform=None):
+    def __init__(self, images, targets, transform=None):
         self.images = images
-        self.inputs = inputs
+        self.targets = targets
         self.transform = transform
 
     def __len__(self):
@@ -112,40 +117,94 @@ class CustomDataset(Dataset):
 
     def __getitem__(self, idx):
         image = self.images[idx]
-        input = self.inputs[idx]
+        target = self.targets[idx]
         if self.transform:
             image = self.transform(image)
         else:
             image = torch.tensor(image, dtype=torch.float16 if USE_FP16 else torch.float32).unsqueeze(0)
             print(timestamp() + "Warning: No transformation applied to image.")
-        return image, torch.tensor(input, dtype=torch.float16 if USE_FP16 else torch.float32)
+        return image, torch.tensor(target, dtype=torch.float16 if USE_FP16 else torch.float32)
 
 # Define the model
 class ConvolutionalNeuralNetwork(nn.Module):
-    def __init__(self):
+    def __init__(self, num_bbox, bbox_coords, num_classes):
         super(ConvolutionalNeuralNetwork, self).__init__()
-        self.conv1 = nn.Conv2d(1, 16, 3, padding=1)  # Input channels = 1 for binary images
-        self.pool = nn.MaxPool2d(2, 2)
-        self.conv2 = nn.Conv2d(16, 32, 3, padding=1)
-        self.conv3 = nn.Conv2d(32, 64, 3, padding=1)
-        self._to_linear = 64 * 52 * 27
-        self.fc1 = nn.Linear(self._to_linear, 500)
-        self.fc2 = nn.Linear(500, OUTPUTS)
+        self.num_bbox = num_bbox
+        self.bbox_coords = bbox_coords
+        self.num_classes = num_classes
+
+        # Convolutional layers
+        self.conv1 = nn.Conv2d(1, 32, kernel_size=3, padding=1)
+        self.relu1 = nn.ReLU()
+        self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.conv2 = nn.Conv2d(32, 64, kernel_size=3, padding=1)
+        self.relu2 = nn.ReLU()
+        self.pool2 = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.conv3 = nn.Conv2d(64, 128, kernel_size=3, padding=1)
+        self.relu3 = nn.ReLU()
+        self.pool3 = nn.MaxPool2d(kernel_size=2, stride=2)
+
+        # Region Proposal Network (RPN)
+        self.rpn_conv = nn.Conv2d(128, 256, kernel_size=3, padding=1)
+        self.rpn_relu = nn.ReLU()
+        self.rpn_cls_layer = nn.Conv2d(256, 2 * self.num_bbox, kernel_size=1)
+        self.rpn_reg_layer = nn.Conv2d(256, 4 * self.num_bbox, kernel_size=1)
+
+        # Fully connected layers
+        self.fc1 = nn.Linear(128 * (IMG_HEIGHT // 8) * (IMG_WIDTH // 8), 512)
+        self.relu4 = nn.ReLU()
         self.dropout = nn.Dropout(DROPOUT)
+        self.fc2 = nn.Linear(512, self.num_bbox * (self.bbox_coords + self.num_classes))
 
     def forward(self, x):
-        x = self.pool(F.relu(self.conv1(x)))  # 420x220 -> 210x110
-        x = self.pool(F.relu(self.conv2(x)))  # 210x110 -> 105x55
-        x = self.pool(F.relu(self.conv3(x)))  # 105x55 -> 52x27
-        x = x.view(-1, self._to_linear)  # Flatten the tensor
-        x = F.relu(self.fc1(x))
+        # Convolutional layers
+        x = self.conv1(x)
+        x = self.relu1(x)
+        x = self.pool1(x)
+        x = self.conv2(x)
+        x = self.relu2(x)
+        x = self.pool2(x)
+        x = self.conv3(x)
+        x = self.relu3(x)
+        x = self.pool3(x)
+
+        # Region Proposal Network
+        rpn_feature = self.rpn_conv(x)
+        rpn_feature = self.rpn_relu(rpn_feature)
+        rpn_cls_output = self.rpn_cls_layer(rpn_feature)
+        rpn_reg_output = self.rpn_reg_layer(rpn_feature)
+
+        # Fully connected layers
+        x = x.view(x.size(0), -1)
+        x = self.fc1(x)
+        x = self.relu4(x)
         x = self.dropout(x)
         x = self.fc2(x)
-        return x
+
+        return rpn_cls_output, rpn_reg_output, x.view(x.size(0), self.num_bbox, self.bbox_coords + self.num_classes)
+
+def custom_loss(rpn_cls_output, rpn_reg_output, detection_output, targets):
+    # RPN classification loss
+    rpn_cls_target = torch.zeros_like(rpn_cls_output)
+    # Assign ground truth labels to the RPN classification targets
+    rpn_cls_loss = F.binary_cross_entropy_with_logits(rpn_cls_output, rpn_cls_target)
+
+    # RPN regression loss
+    rpn_reg_target = torch.zeros_like(rpn_reg_output)
+    # Assign ground truth bounding box coordinates to the RPN regression targets
+    rpn_reg_loss = F.smooth_l1_loss(rpn_reg_output, rpn_reg_target)
+
+    # Object detection loss
+    detection_target = torch.zeros_like(detection_output)
+    # Assign ground truth class labels and bounding box coordinates to the detection targets
+    detection_loss = F.mse_loss(detection_output, detection_target)
+
+    total_loss = rpn_cls_loss + rpn_reg_loss + detection_loss
+    return total_loss
 
 def main():
     # Load data
-    images, inputs = load_data()
+    images, targets = load_data()
 
     # Transformations
     transform = transforms.Compose([
@@ -153,13 +212,12 @@ def main():
     ])
 
     # Create dataset
-    dataset = CustomDataset(images, inputs, transform=transform)
+    dataset = CustomDataset(images, targets, transform=transform)
 
     # Initialize model, loss function, and optimizer
-    model = ConvolutionalNeuralNetwork().to(DEVICE)
+    model = ConvolutionalNeuralNetwork(NUM_BBOX, BBOX_COORDS, NUM_CLASSES).to(DEVICE)
     if USE_FP16:
-        model = model.half()  # Convert the model to use 16-bit float format
-    criterion = nn.MSELoss()
+        model = model.half()
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
     # Split the dataset into training and validation sets
@@ -198,29 +256,31 @@ def main():
         # Training phase
         model.train()
         running_loss = 0.0
-        for i, data in enumerate(train_dataloader, 0):
-            inputs, labels = data
-            inputs, labels = inputs.to(DEVICE), labels.to(DEVICE)
+        for batch_idx, (images, targets) in enumerate(train_dataloader):
+            images = images.to(DEVICE)
+            targets = [t.to(DEVICE) for t in targets]
 
             optimizer.zero_grad()
 
-            outputs = model(inputs)
-            loss = criterion(outputs, labels)
+            rpn_cls_output, rpn_reg_output, detection_output = model(images)
+            loss = custom_loss(rpn_cls_output, rpn_reg_output, detection_output, targets)
             loss.backward()
             optimizer.step()
-            
+
             running_loss += loss.item()
+
+        train_loss = running_loss / len(train_dataloader)
 
         # Validation phase
         model.eval()
         val_loss = 0.0
         with torch.no_grad():
-            for i, data in enumerate(val_dataloader, 0):
-                inputs, labels = data
-                inputs, labels = inputs.to(DEVICE), labels.to(DEVICE)
+            for batch_idx, (images, targets) in enumerate(val_dataloader):
+                images = images.to(DEVICE)
+                targets = [t.to(DEVICE) for t in targets]
 
-                outputs = model(inputs)
-                loss = criterion(outputs, labels)
+                rpn_cls_output, rpn_reg_output, detection_output = model(images)
+                loss = custom_loss(rpn_cls_output, rpn_reg_output, detection_output, targets)
                 val_loss += loss.item()
 
         val_loss /= len(val_dataloader)
@@ -264,7 +324,7 @@ def main():
             last_model_saved = True
             break
         except:
-            print(timestamp() + "Failed to save the last model. Retrying...")
+            print(timestamp() + f"Failed to save the last model: {traceback.format_exc()} - Retrying...")
     print(timestamp() + "Last model saved successfully.") if last_model_saved else print(timestamp() + "Failed to save the last model.")
 
     # Save the best model
@@ -277,7 +337,7 @@ def main():
             best_model_saved = True
             break
         except:
-            print(timestamp() + "Failed to save the best model. Retrying...")
+            print(timestamp() + f"Failed to save the best model: {traceback.format_exc()} - Retrying...")
     print(timestamp() + "Best model saved successfully.") if best_model_saved else print(timestamp() + "Failed to save the best model.")
 
     print("\n------------------------------------\n")
