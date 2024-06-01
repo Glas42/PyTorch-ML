@@ -188,7 +188,7 @@ def main():
     summary_writer = SummaryWriter(f"{PATH}/AI/Regression/logs", comment="Regression-Training", flush_secs=20)
 
     print(timestamp() + "Starting training...")
-    print("\n---------------------------------------------------------------------------------------------------------\n")
+    print("\n-----------------------------------------------------------------------------------------------------------\n")
 
     training_time_prediction = time.time()
     training_start_time = time.time()
@@ -310,7 +310,7 @@ def main():
     while PROGRESS_PRINT != "received":
         time.sleep(1)
 
-    print("\n\n---------------------------------------------------------------------------------------------------------")
+    print("\n\n-----------------------------------------------------------------------------------------------------------")
 
     TRAINING_TIME = time.strftime('%H-%M-%S', time.gmtime(time.time() - training_start_time))
     TRAINING_DATE = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')

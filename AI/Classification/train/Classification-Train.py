@@ -173,21 +173,21 @@ def main():
     wait = 0
 
     # Create tensorboard logs folder if it doesn't exist
-    if not os.path.exists(f"{PATH}/AI/ObjectDetection/logs"): 
-        os.makedirs(f"{PATH}/AI/ObjectDetection/logs")
+    if not os.path.exists(f"{PATH}/AI/Classification/logs"): 
+        os.makedirs(f"{PATH}/AI/Classification/logs")
 
     # Delete previous tensorboard logs
-    for obj in os.listdir(f"{PATH}/AI/ObjectDetection/logs"):
+    for obj in os.listdir(f"{PATH}/AI/Classification/logs"):
         try:
-            shutil.rmtree(f"{PATH}/AI/ObjectDetection/logs/{obj}")
+            shutil.rmtree(f"{PATH}/AI/Classification/logs/{obj}")
         except:
-            os.remove(f"{PATH}/AI/ObjectDetection/logs/{obj}")
+            os.remove(f"{PATH}/AI/Classification/logs/{obj}")
 
     # Tensorboard setup
-    summary_writer = SummaryWriter(f"{PATH}/AI/ObjectDetection/logs", comment="ObjectDetection-Training", flush_secs=20)
+    summary_writer = SummaryWriter(f"{PATH}/AI/Classification/logs", comment="Classification-Training", flush_secs=20)
 
     print(timestamp() + "Starting training...")
-    print("\n---------------------------------------------------------------------------------------------------------\n")
+    print("\n-----------------------------------------------------------------------------------------------------------\n")
 
     training_time_prediction = time.time()
     training_start_time = time.time()
@@ -309,7 +309,7 @@ def main():
     while PROGRESS_PRINT != "received":
         time.sleep(1)
 
-    print("\n\n---------------------------------------------------------------------------------------------------------")
+    print("\n\n-----------------------------------------------------------------------------------------------------------")
 
     TRAINING_TIME = time.strftime('%H-%M-%S', time.gmtime(time.time() - training_start_time))
     TRAINING_DATE = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
@@ -323,7 +323,7 @@ def main():
     for i in range(5):
         try:
             last_model = torch.jit.script(model)
-            torch.jit.save(last_model, os.path.join(MODEL_PATH, f"ObjectDetectionModel-LAST_EPOCHS-{epoch+1}_BATCH-{BATCH_SIZE}_IMG_WIDTH-{IMG_WIDTH}_IMG_HEIGHT-{IMG_HEIGHT}_IMG_COUNT-{IMG_COUNT}_TIME-{TRAINING_TIME}_DATE-{TRAINING_DATE}.pt"))
+            torch.jit.save(last_model, os.path.join(MODEL_PATH, f"ClassificationModel-LAST_EPOCHS-{epoch+1}_BATCH-{BATCH_SIZE}_IMG_WIDTH-{IMG_WIDTH}_IMG_HEIGHT-{IMG_HEIGHT}_IMG_COUNT-{IMG_COUNT}_TIME-{TRAINING_TIME}_DATE-{TRAINING_DATE}.pt"))
             last_model_saved = True
             break
         except:
@@ -336,7 +336,7 @@ def main():
     for i in range(5):
         try:
             best_model = torch.jit.script(best_model)
-            torch.jit.save(best_model, os.path.join(MODEL_PATH, f"ObjectDetectionModel-BEST_EPOCHS-{best_model_epoch+1}_BATCH-{BATCH_SIZE}_IMG_WIDTH-{IMG_WIDTH}_IMG_HEIGHT-{IMG_HEIGHT}_IMG_COUNT-{IMG_COUNT}_TIME-{TRAINING_TIME}_DATE-{TRAINING_DATE}.pt"))
+            torch.jit.save(best_model, os.path.join(MODEL_PATH, f"ClassificationModel-BEST_EPOCHS-{best_model_epoch+1}_BATCH-{BATCH_SIZE}_IMG_WIDTH-{IMG_WIDTH}_IMG_HEIGHT-{IMG_HEIGHT}_IMG_COUNT-{IMG_COUNT}_TIME-{TRAINING_TIME}_DATE-{TRAINING_DATE}.pt"))
             best_model_saved = True
             break
         except:
