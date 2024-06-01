@@ -75,7 +75,7 @@ print("\n------------------------------------\n")
 
 print(timestamp() + "Loading...")
 
-def load_data(): 
+def load_data():
     images = []
     user_inputs = []
     for file in os.listdir(DATA_PATH):
@@ -187,7 +187,7 @@ def main():
     summary_writer = SummaryWriter(f"{PATH}/AI/ObjectDetection/logs", comment="ObjectDetection-Training", flush_secs=20)
 
     print(timestamp() + "Starting training...")
-    print("\n------------------------------------------------------------------------------------------------------\n")
+    print("\n---------------------------------------------------------------------------------------------------------\n")
 
     training_time_prediction = time.time()
     training_start_time = time.time()
@@ -215,7 +215,7 @@ def main():
             if progress > 1: progress = 1
             if progress < 0: progress = 0
 
-            progress = '█' * int(progress * 7) + '░' * (7 - int(progress * 7))
+            progress = '█' * int(progress * 10) + ' ' * (10 - int(progress * 10))
             epoch_time = round((epoch_total_time) if epoch_total_time > 1 else (epoch_total_time) * 1000, 2)
             eta = time.strftime('%H:%M:%S', time.gmtime(round((training_time_prediction - training_start_time) / (epoch + 1) * NUM_EPOCHS - (training_time_prediction - training_start_time) + (training_time_prediction - time.time()), 2)))
 
@@ -309,7 +309,7 @@ def main():
     while PROGRESS_PRINT != "received":
         time.sleep(1)
 
-    print("\n\n------------------------------------------------------------------------------------------------------")
+    print("\n\n---------------------------------------------------------------------------------------------------------")
 
     TRAINING_TIME = time.strftime('%H-%M-%S', time.gmtime(time.time() - training_start_time))
     TRAINING_DATE = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
