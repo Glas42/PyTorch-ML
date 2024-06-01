@@ -216,7 +216,7 @@ def main():
             if progress > 1: progress = 1
             if progress < 0: progress = 0
 
-            progress = '█' * int(progress * 10) + ' ' * (10 - int(progress * 10))
+            progress = '█' * int(progress * 10) + '░' * (10 - int(progress * 10))
             epoch_time = round((epoch_total_time) if epoch_total_time > 1 else (epoch_total_time) * 1000, 2)
             eta = time.strftime('%H:%M:%S', time.gmtime(round((training_time_prediction - training_start_time) / (epoch + 1) * NUM_EPOCHS - (training_time_prediction - training_start_time) + (training_time_prediction - time.time()), 2)))
 
