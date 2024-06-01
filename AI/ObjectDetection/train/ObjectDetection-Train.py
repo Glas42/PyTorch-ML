@@ -257,6 +257,7 @@ def main():
             loss.backward()
             optimizer.step()
             running_training_loss += loss.item()
+        running_training_loss /= len(train_dataloader)
         training_loss = running_training_loss
 
         epoch_training_time = time.time() - epoch_training_start_time
@@ -274,6 +275,7 @@ def main():
                 outputs = model(inputs)
                 loss = criterion(outputs, labels)
                 running_validation_loss += loss.item()
+        running_validation_loss /= len(val_dataloader)
         validation_loss = running_validation_loss
 
         epoch_validation_time = time.time() - epoch_validation_start_time
