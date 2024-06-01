@@ -1,27 +1,23 @@
-import cv2
 import os
 
 PATH = os.path.dirname(os.path.dirname(__file__)) + "\\ModelFiles\\"
 
 count = len(os.listdir(f"{PATH}TrainingData")) / 2
 curCount = 0
-
-for file in os.listdir(f"{PATH}TrainingData"):
-    if file.endswith(".png"):
-        height, width = cv2.imread(os.path.join(f"{PATH}TrainingData", file)).shape[:2]
-        break
-
 for file in os.listdir(f"{PATH}TrainingData"):
     if file.endswith(".txt"):
-        line = str(open(os.path.join(f"{PATH}TrainingData", file), "r").read()).replace("'", "").replace("(", "").replace(")", "").replace(" ", "").split(",")
+        line = str(open(os.path.join(f"{PATH}TrainingData", file), "r").readline())
 
-        obj_x1 = float(int(line[0]) / width)
-        obj_y1 = float(int(line[1]) / height)
-        obj_x2 = float(int(line[2]) / width)
-        obj_y2 = float(int(line[3]) / height)
-        obj_class = line[4]
-
-        line = f"{obj_x1},{obj_y1},{obj_x2},{obj_y2},{obj_class}"
+        pairs = line.split(',')
+        for pair in pairs:
+            key, value = pair.split(':')
+            if key == 'Correction':
+                correction = float(value)
+            elif key == 'LeftIndicator':
+                left_indicator = 1 if value.lower() == 'true' else 0
+            elif key == 'RightIndicator':
+                right_indicator = 1 if value.lower() == 'true' else 0
+        line = f"{correction},{left_indicator},{right_indicator}"
 
         with open(os.path.join(f"{PATH}EditedTrainingData", file), "w") as f:
             f.truncate(0)

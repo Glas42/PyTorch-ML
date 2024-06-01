@@ -24,23 +24,38 @@ PATH = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)
 DATA_PATH = PATH + "\\ModelFiles\\EditedTrainingData"
 MODEL_PATH = PATH + "\\ModelFiles\\Models"
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-IMG_WIDTH = 420
-IMG_HEIGHT = 220
 NUM_EPOCHS = 200
 BATCH_SIZE = 200
-OUTPUTS = 3
-DROPOUT = 0.5
+IMG_WIDTH = 420
+IMG_HEIGHT = 220
+IMG_BINARIZE = True
 LEARNING_RATE = 0.0001
 TRAIN_VAL_RATIO = 0.8
 NUM_WORKERS = 0
-SHUFFLE = True
+DROPOUT = 0.5
 PATIENCE = 10
+SHUFFLE = True
 PIN_MEMORY = True
+
+OUTPUTS = "N/A"
+for file in os.listdir(DATA_PATH):
+    if file.endswith(".txt"):
+        with open(os.path.join(DATA_PATH, file), 'r') as f:
+                content = str(f.read()).split(',')
+                user_input = [float(i) for i in content]
+                OUTPUTS = len(user_input)
+                break
+if OUTPUTS == "N/A":
+    print("No user inputs found, exiting...")
+    exit()
 
 IMG_COUNT = 0
 for file in os.listdir(DATA_PATH):
     if file.endswith(".png"):
         IMG_COUNT += 1
+if IMG_COUNT == 0:
+    print("No images found, exiting...")
+    exit()
 
 RED = "\033[91m"
 GREEN = "\033[92m"
@@ -82,13 +97,14 @@ def load_data():
             img = np.array(img)
             img = cv2.resize(img, (IMG_WIDTH, IMG_HEIGHT))
             img = img / 255.0  # Normalize the image
+            if IMG_BINARIZE:
+                img = cv2.threshold(img, 0.5, 1.0, cv2.THRESH_BINARY)[1]
 
             user_inputs_file = os.path.join(DATA_PATH, file.replace(".png", ".txt"))
             if os.path.exists(user_inputs_file):
                 with open(user_inputs_file, 'r') as f:
                     content = str(f.read()).split(',')
-                    steering, left_indicator, right_indicator = float(content[0]), 1 if str(content[1]) == 'True' else 0, 1 if str(content[2]) == 'True' else 0
-                    user_input = [steering, left_indicator, right_indicator]
+                    user_input = [float(i) for i in content]
                 images.append(img)
                 user_inputs.append(user_input)
             else:
