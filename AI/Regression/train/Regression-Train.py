@@ -195,7 +195,7 @@ def main():
     epoch_total_time = 0
     training_loss = 0
     validation_loss = 0
-    epoch = 0
+    training_epoch = 0
 
     global PROGRESS_PRINT
     PROGRESS_PRINT = "initializing"
@@ -218,15 +218,15 @@ def main():
 
             progress = '█' * int(progress * 10) + '░' * (10 - int(progress * 10))
             epoch_time = round((epoch_total_time) if epoch_total_time > 1 else (epoch_total_time) * 1000, 2)
-            eta = time.strftime('%H:%M:%S', time.gmtime(round((training_time_prediction - training_start_time) / (epoch + 1) * NUM_EPOCHS - (training_time_prediction - training_start_time) + (training_time_prediction - time.time()), 2)))
+            eta = time.strftime('%H:%M:%S', time.gmtime(round((training_time_prediction - training_start_time) / (training_epoch + 1) * NUM_EPOCHS - (training_time_prediction - training_start_time) + (training_time_prediction - time.time()), 2)))
 
-            print(f"\r{progress} Epoch {epoch+1}, Train Loss: {num_to_str(training_loss)}, Val Loss: {num_to_str(validation_loss)}, {epoch_time}{'s' if epoch_total_time > 1 else 'ms'}/Epoch, ETA: {eta}                       ", end='', flush=True)
+            print(f"\r{progress} Epoch {training_epoch+1}, Train Loss: {num_to_str(training_loss)}, Val Loss: {num_to_str(validation_loss)}, {epoch_time}{'s' if epoch_total_time > 1 else 'ms'}/Epoch, ETA: {eta}                       ", end='', flush=True)
 
             time.sleep(epoch_total_time/10 if epoch_total_time/10 >= 1 else 1)
         if PROGRESS_PRINT == "early stopped":
-            print(f"\rEarly stopping at Epoch {epoch+1}, Train Loss: {num_to_str(training_loss)}, Val Loss: {num_to_str(validation_loss)}                                              ", end='', flush=True)
+            print(f"\rEarly stopping at Epoch {training_epoch+1}, Train Loss: {num_to_str(training_loss)}, Val Loss: {num_to_str(validation_loss)}                                              ", end='', flush=True)
         elif PROGRESS_PRINT == "finished":
-            print(f"\rFinished at Epoch {epoch+1}, Train Loss: {num_to_str(training_loss)}, Val Loss: {num_to_str(validation_loss)}                                              ", end='', flush=True)
+            print(f"\rFinished at Epoch {training_epoch+1}, Train Loss: {num_to_str(training_loss)}, Val Loss: {num_to_str(validation_loss)}                                              ", end='', flush=True)
         PROGRESS_PRINT = "received"
     threading.Thread(target=training_progress_print, daemon=True).start()
 
@@ -302,6 +302,7 @@ def main():
             'epoch_training_time': epoch_training_time,
             'epoch_validation_time': epoch_validation_time
         }, epoch + 1)
+        training_epoch = epoch
         training_time_prediction = time.time()
         PROGRESS_PRINT = "running"
 
