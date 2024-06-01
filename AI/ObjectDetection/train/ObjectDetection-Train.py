@@ -13,6 +13,7 @@ import multiprocessing
 import torch.nn as nn
 from PIL import Image
 import numpy as np
+import threading
 import shutil
 import torch
 import time
@@ -82,7 +83,6 @@ def load_data():
             img = Image.open(os.path.join(DATA_PATH, file)).convert('L')  # Convert to grayscale
             img = np.array(img)
             img = cv2.resize(img, (IMG_WIDTH, IMG_HEIGHT))
-            img = np.array(img, dtype=np.float16 if USE_FP16 else np.float32) / 255.0  # Convert to float16 or float32
 
             user_inputs_file = os.path.join(DATA_PATH, file.replace(".png", ".txt"))
             if os.path.exists(user_inputs_file):
@@ -167,7 +167,7 @@ def main():
     val_dataloader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=SHUFFLE, num_workers=NUM_WORKERS, pin_memory=PIN_MEMORY)
 
     # Early stopping variables
-    best_val_loss = float('inf')
+    best_validation_loss = float('inf')
     best_model = None
     best_model_epoch = None
     wait = 0
@@ -188,64 +188,130 @@ def main():
 
     print(timestamp() + "Starting training...")
     print("\n------------------------------------------------------------------------------------------------------\n")
-    start_time = time.time()
-    update_time = start_time
+
+    training_time_prediction = time.time()
+    training_start_time = time.time()
+    epoch_total_time = 0
+    training_loss = 0
+    validation_loss = 0
+    epoch = 0
+
+    global PROGRESS_PRINT
+    PROGRESS_PRINT = "initializing"
+    def training_progress_print():
+        global PROGRESS_PRINT
+        def num_to_str(num: int):
+            str_num = format(num, '.15f')
+            while len(str_num) > 15:
+                str_num = str_num[:-1]
+            while len(str_num) < 15:
+                str_num = str_num + '0'
+            return str_num
+        while PROGRESS_PRINT == "initializing":
+            time.sleep(1)
+        while PROGRESS_PRINT == "running":
+
+            progress = (time.time() - epoch_total_start_time) / epoch_total_time
+            if progress > 1: progress = 1
+            if progress < 0: progress = 0
+
+            progress = '█' * int(progress * 7) + '░' * (7 - int(progress * 7))
+            epoch_time = round((epoch_total_time) if epoch_total_time > 1 else (epoch_total_time) * 1000, 2)
+            eta = time.strftime('%H:%M:%S', time.gmtime(round((training_time_prediction - training_start_time) / (epoch + 1) * NUM_EPOCHS - (training_time_prediction - training_start_time) + (training_time_prediction - time.time()), 2)))
+
+            print(f"\r{progress} Epoch {epoch+1}, Train Loss: {num_to_str(training_loss)}, Val Loss: {num_to_str(validation_loss)}, {epoch_time}{'s' if epoch_total_time > 1 else 'ms'}/Epoch, ETA: {eta}                       ", end='', flush=True)
+
+            time.sleep(epoch_total_time/10 if epoch_total_time/10 >= 1 else 1)
+        if PROGRESS_PRINT == "early stopped":
+            print(f"\rEarly stopping at Epoch {epoch+1}, Train Loss: {num_to_str(training_loss)}, Val Loss: {num_to_str(validation_loss)}                                              ", end='', flush=True)
+        elif PROGRESS_PRINT == "finished":
+            print(f"\rFinished at Epoch {epoch+1}, Train Loss: {num_to_str(training_loss)}, Val Loss: {num_to_str(validation_loss)}                                              ", end='', flush=True)
+        PROGRESS_PRINT = "received"
+    threading.Thread(target=training_progress_print, daemon=True).start()
 
     for epoch in range(NUM_EPOCHS):
+        epoch_total_start_time = time.time()
+
+
+        epoch_training_start_time = time.time()
+
         # Training phase
         model.train()
-        running_loss = 0.0
+        running_training_loss = 0.0
         for i, data in enumerate(train_dataloader, 0):
             inputs, labels = data
             inputs, labels = inputs.to(DEVICE), labels.to(DEVICE)
-
             optimizer.zero_grad()
-
             outputs = model(inputs)
             loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
-            
-            running_loss += loss.item()
+            running_training_loss += loss.item()
+        training_loss = running_training_loss
+
+        epoch_training_time = time.time() - epoch_training_start_time
+
+
+        epoch_validation_start_time = time.time()
 
         # Validation phase
         model.eval()
-        val_loss = 0.0
+        running_validation_loss = 0.0
         with torch.no_grad():
             for i, data in enumerate(val_dataloader, 0):
                 inputs, labels = data
                 inputs, labels = inputs.to(DEVICE), labels.to(DEVICE)
-
                 outputs = model(inputs)
                 loss = criterion(outputs, labels)
-                val_loss += loss.item()
+                running_validation_loss += loss.item()
+        validation_loss = running_validation_loss
 
-        val_loss /= len(val_dataloader)
+        epoch_validation_time = time.time() - epoch_validation_start_time
+
 
         # Early stopping
-        if val_loss < best_val_loss:
-            best_val_loss = val_loss
+        if validation_loss < best_validation_loss:
+            best_validation_loss = validation_loss
             best_model = model
             best_model_epoch = epoch
             wait = 0
         else:
             wait += 1
             if wait >= PATIENCE:
-                print(f"\rEarly stopping at Epoch {epoch+1}, Train Loss: {running_loss / len(train_dataloader)}, Val Loss: {val_loss}                       ", end='', flush=True)
+                epoch_total_time = time.time() - epoch_total_start_time
+                # Log values to Tensorboard
+                summary_writer.add_scalars(f'Stats', {
+                    'train_loss': training_loss,
+                    'validation_loss': validation_loss,
+                    'epoch_total_time': epoch_total_time,
+                    'epoch_training_time': epoch_training_time,
+                    'epoch_validation_time': epoch_validation_time
+                }, epoch + 1)
+                training_time_prediction = time.time()
+                PROGRESS_PRINT = "early stopped"
                 break
 
-        # Log values to Tensorboard
-        summary_writer.add_scalars(f'Loss', {
-            'train': running_loss / len(train_dataloader),
-            'validation': val_loss,
-        }, epoch)
+        epoch_total_time = time.time() - epoch_total_start_time
 
-        print(f"\rEpoch {epoch+1}, Train Loss: {running_loss / len(train_dataloader)}, Val Loss: {val_loss}, {round((time.time() - update_time) if time.time() - update_time > 1 else (time.time() - update_time) * 1000, 2)}{'s' if time.time() - update_time > 1 else 'ms'}/Epoch, ETA: {time.strftime('%H:%M:%S', time.gmtime(round((time.time() - start_time) / (epoch + 1) * NUM_EPOCHS - (time.time() - start_time), 2)))}                       ", end='', flush=True)
-        update_time = time.time()
+        # Log values to Tensorboard
+        summary_writer.add_scalars(f'Stats', {
+            'train_loss': training_loss,
+            'validation_loss': validation_loss,
+            'epoch_total_time': epoch_total_time,
+            'epoch_training_time': epoch_training_time,
+            'epoch_validation_time': epoch_validation_time
+        }, epoch + 1)
+        training_time_prediction = time.time()
+        PROGRESS_PRINT = "running"
+
+    if PROGRESS_PRINT != "early stopped":
+        PROGRESS_PRINT = "finished"
+    while PROGRESS_PRINT != "received":
+        time.sleep(1)
 
     print("\n\n------------------------------------------------------------------------------------------------------")
 
-    TRAINING_TIME = time.strftime('%H-%M-%S', time.gmtime(time.time() - start_time))
+    TRAINING_TIME = time.strftime('%H-%M-%S', time.gmtime(time.time() - training_start_time))
     TRAINING_DATE = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
 
     print()
