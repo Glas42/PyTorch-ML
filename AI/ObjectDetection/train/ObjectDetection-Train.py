@@ -34,7 +34,6 @@ LEARNING_RATE = 0.0001
 TRAIN_VAL_RATIO = 0.8
 NUM_WORKERS = 0
 SHUFFLE = True
-USE_FP16 = False
 PATIENCE = 10
 PIN_MEMORY = True
 
@@ -64,7 +63,6 @@ print(timestamp() + "> Dataset split:", TRAIN_VAL_RATIO)
 print(timestamp() + "> Learning rate:", LEARNING_RATE)
 print(timestamp() + "> Number of workers:", NUM_WORKERS)
 print(timestamp() + "> Shuffle:", SHUFFLE)
-print(timestamp() + "> Use FP16:", USE_FP16)
 print(timestamp() + "> Patience:", PATIENCE)
 print(timestamp() + "> Pin memory:", PIN_MEMORY)
 print(timestamp() + "> Image width:", IMG_WIDTH)
@@ -83,6 +81,7 @@ def load_data():
             img = Image.open(os.path.join(DATA_PATH, file)).convert('L')  # Convert to grayscale
             img = np.array(img)
             img = cv2.resize(img, (IMG_WIDTH, IMG_HEIGHT))
+            img = img / 255.0  # Normalize the image
 
             user_inputs_file = os.path.join(DATA_PATH, file.replace(".png", ".txt"))
             if os.path.exists(user_inputs_file):
@@ -95,7 +94,7 @@ def load_data():
             else:
                 pass
 
-    return np.array(images, dtype=np.float16 if USE_FP16 else np.float32), np.array(user_inputs, dtype=np.float16 if USE_FP16 else np.float32)  # Convert to float16 or float32
+    return np.array(images, dtype=np.float32), np.array(user_inputs, dtype=np.float32)
 
 # Custom dataset class
 class CustomDataset(Dataset):
@@ -110,18 +109,14 @@ class CustomDataset(Dataset):
     def __getitem__(self, idx):
         image = self.images[idx]
         user_input = self.user_inputs[idx]
-        if self.transform:
-            image = self.transform(image)
-        else:
-            image = torch.tensor(image, dtype=torch.float16 if USE_FP16 else torch.float32).unsqueeze(0)
-            print(timestamp() + "Warning: No transformation applied to image.")
-        return image, torch.tensor(user_input, dtype=torch.float16 if USE_FP16 else torch.float32)
+        image = self.transform(image)
+        return image, torch.tensor(user_input, dtype=torch.float32)
 
 # Define the model
 class ConvolutionalNeuralNetwork(nn.Module):
     def __init__(self):
         super(ConvolutionalNeuralNetwork, self).__init__()
-        self.conv1 = nn.Conv2d(1, 16, 3, padding=1)  # Input channels = 1 for binary images
+        self.conv1 = nn.Conv2d(1, 16, 3, padding=1)  # Input channels = 1 for grayscale/binary images
         self.pool = nn.MaxPool2d(2, 2)
         self.conv2 = nn.Conv2d(16, 32, 3, padding=1)
         self.conv3 = nn.Conv2d(32, 64, 3, padding=1)
@@ -154,8 +149,6 @@ def main():
 
     # Initialize model, loss function, and optimizer
     model = ConvolutionalNeuralNetwork().to(DEVICE)
-    if USE_FP16:
-        model = model.half()  # Convert the model to use 16-bit float format
     criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
