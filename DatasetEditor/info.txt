@@ -1,0 +1,2 @@
+This folder contains python scripts to edit the Dataset files which are in the /ModelFiles/TrainingData folder.
+The scripts will save the edited data to the /ModelFiles/EditedTrainingData folder.

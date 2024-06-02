@@ -1,0 +1,11 @@
+EditedTrainingData:
+The training code will read the data for the training from this folder.
+The format is:
+.png images
+.txt files in the format "value,value,value,..." which have the same name as the corresponding .png images
+
+Models:
+The training code will save the models to this folder.
+
+TrainingData:
+You can place your training data here to edit it with the DatasetEditors and automatically save the edited training data to the EditedTrainingData folder.

@@ -26,8 +26,8 @@ MODEL_PATH = PATH + "\\ModelFiles\\Models"
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 NUM_EPOCHS = 200
 BATCH_SIZE = 200
-IMG_WIDTH = 420
-IMG_HEIGHT = 220
+IMG_WIDTH = 28
+IMG_HEIGHT = 28
 IMG_BINARIZE = False
 LEARNING_RATE = 0.0001
 TRAIN_VAL_RATIO = 0.8
@@ -92,6 +92,10 @@ print(timestamp() + "Loading...")
 def load_data():
     images = []
     user_inputs = []
+    processed_files = 0
+    total_files = len([file for file in os.listdir(DATA_PATH) if file.endswith(".png")])
+    print(f"\r{timestamp()}Loading dataset...", end='', flush=True)
+
     for file in os.listdir(DATA_PATH):
         if file.endswith(".png"):
             img = Image.open(os.path.join(DATA_PATH, file)).convert('L')  # Convert to grayscale
@@ -108,17 +112,30 @@ def load_data():
                     user_input = [float(i) for i in content]
                 images.append(img)
                 user_inputs.append(user_input)
-            else:
-                pass
 
-    return np.array(images, dtype=np.float32), np.array(user_inputs, dtype=np.float32)
+            if len(images) == BATCH_SIZE:
+                print(f"\r{timestamp()}Loading dataset... ({round(100 * processed_files / total_files)}%)", end='', flush=True)
+                yield np.array(images, dtype=np.float32), np.array(user_inputs, dtype=np.float32)
+                images = []
+                user_inputs = []
+
+            processed_files += 1
+
+    if images:
+        print(f"\r{timestamp()}Loading dataset... ({round(100 * processed_files / total_files)}%)", end='', flush=True)
+        yield np.array(images, dtype=np.float32), np.array(user_inputs, dtype=np.float32)
+
+    print(f"\r{timestamp()}Loading dataset... (100%)", end='', flush=True)
 
 # Custom dataset class
 class CustomDataset(Dataset):
-    def __init__(self, images, user_inputs, transform=None):
-        self.images = images
-        self.user_inputs = user_inputs
+    def __init__(self, transform=None):
         self.transform = transform
+        self.images = []
+        self.user_inputs = []
+        for images, user_inputs in load_data():
+            self.images.extend(images)
+            self.user_inputs.extend(user_inputs)
 
     def __len__(self):
         return len(self.images)
@@ -137,37 +154,29 @@ class ConvolutionalNeuralNetwork(nn.Module):
         self.pool = nn.MaxPool2d(2, 2)
         self.conv2 = nn.Conv2d(16, 32, 3, padding=1)
         self.conv3 = nn.Conv2d(32, 64, 3, padding=1)
-        self._to_linear = 64 * 52 * 27
+        self._to_linear = 64 * (IMG_WIDTH // 8) * (IMG_HEIGHT // 8)
         self.fc1 = nn.Linear(self._to_linear, 500)
         self.fc2 = nn.Linear(500, OUTPUTS)
         self.dropout = nn.Dropout(DROPOUT)
 
     def forward(self, x):
-        x = self.pool(F.relu(self.conv1(x)))  # 420x220 -> 210x110
-        x = self.pool(F.relu(self.conv2(x)))  # 210x110 -> 105x55
-        x = self.pool(F.relu(self.conv3(x)))  # 105x55 -> 52x27
-        x = x.view(-1, self._to_linear)  # Flatten the tensor
+        x = self.pool(F.relu(self.conv1(x)))
+        x = self.pool(F.relu(self.conv2(x)))
+        x = self.pool(F.relu(self.conv3(x)))
+        x = x.view(-1, self._to_linear)
         x = F.relu(self.fc1(x))
         x = self.dropout(x)
         x = self.fc2(x)
         return x
 
 def main():
-    # Load data
-    images, user_inputs = load_data()
-
     # Transformations
     transform = transforms.Compose([
         transforms.ToTensor(),
     ])
 
-    # Create dataset
-    dataset = CustomDataset(images, user_inputs, transform=transform)
-
-    # Initialize model, loss function, and optimizer
-    model = ConvolutionalNeuralNetwork().to(DEVICE)
-    criterion = nn.MSELoss()
-    optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
+    # Load the dataset
+    dataset = CustomDataset(transform=transform)
 
     # Split the dataset into training and validation sets
     train_size = int(TRAIN_VAL_RATIO * len(dataset))
@@ -175,6 +184,11 @@ def main():
     train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
     train_dataloader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=SHUFFLE, num_workers=NUM_WORKERS, pin_memory=PIN_MEMORY)
     val_dataloader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=SHUFFLE, num_workers=NUM_WORKERS, pin_memory=PIN_MEMORY)
+
+    # Initialize model, loss function, and optimizer
+    model = ConvolutionalNeuralNetwork().to(DEVICE)
+    criterion = nn.MSELoss()
+    optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
     # Early stopping variables
     best_validation_loss = float('inf')
@@ -196,7 +210,7 @@ def main():
     # Tensorboard setup
     summary_writer = SummaryWriter(f"{PATH}/AI/Classification/logs", comment="Classification-Training", flush_secs=20)
 
-    print(timestamp() + "Starting training...")
+    print(f"\r{timestamp()}Starting training...                       ")
     print("\n-----------------------------------------------------------------------------------------------------------\n")
 
     training_time_prediction = time.time()

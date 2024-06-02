@@ -9,3 +9,4 @@
 # ignore the tensorboard logs
 /AI/Regression/logs
 /AI/ObjectDetection/logs
+/AI/Classification/logs
