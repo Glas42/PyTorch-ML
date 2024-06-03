@@ -16,8 +16,8 @@ if MODEL_PATH == "":
     print("No model found.")
     exit()
 
-IMG_WIDTH = 28
-IMG_HEIGHT = 28
+IMG_WIDTH = 80
+IMG_HEIGHT = 160
 
 string = MODEL_PATH.split("\\")[-1]
 epochs = int(string.split("EPOCHS-")[1].split("_")[0])
