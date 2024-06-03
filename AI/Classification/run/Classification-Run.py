@@ -1,13 +1,10 @@
 from torchvision import transforms
 import numpy as np
-import bettercam
 import torch
-import time
 import cv2
 import os
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-camera = bettercam.create(output_color="BGR", output_idx=0)
 
 PATH = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))) + "\\ModelFiles\\Models"
 MODEL_PATH = ""
@@ -19,9 +16,8 @@ if MODEL_PATH == "":
     print("No model found.")
     exit()
 
-IMG_WIDTH = 420
-IMG_HEIGHT = 220
-OUTPUTS = 5
+IMG_WIDTH = 28
+IMG_HEIGHT = 28
 
 string = MODEL_PATH.split("\\")[-1]
 epochs = int(string.split("EPOCHS-")[1].split("_")[0])
@@ -48,32 +44,25 @@ transform = transforms.Compose([
     transforms.ToTensor(),
 ])
 
-cv2.namedWindow('frame', cv2.WINDOW_NORMAL)
-cv2.setWindowProperty('frame', cv2.WND_PROP_TOPMOST, 1)
-cv2.resizeWindow('frame', IMG_WIDTH, IMG_HEIGHT)
+total = len(os.listdir(f"{os.path.dirname(PATH)}\\EditedTrainingData")) // 2
+correct = 0
 
-while True:
-    start = time.time()
-    frame = camera.grab()
-    if frame is None:
-        continue
+for file in os.listdir(f"{os.path.dirname(PATH)}\\EditedTrainingData"):
+    if file.endswith(".png"):
 
-    frame = np.array(frame)
-    frame = cv2.resize(frame, (IMG_WIDTH, IMG_HEIGHT))
-    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        frame = cv2.imread(os.path.join(f"{os.path.dirname(PATH)}\\EditedTrainingData", file))
+        frame = cv2.resize(frame, (IMG_WIDTH, IMG_HEIGHT))
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-    with torch.no_grad():
-        output = model(transform(frame).unsqueeze(0).to(device))
+        with torch.no_grad():
+            output = model(transform(frame).unsqueeze(0).to(device))
 
-    obj_x1, obj_y1, obj_x2, obj_y2, obj_present, obj_class = output[0].tolist()
-    print(f"{obj_class}: {obj_present}")
+        obj_class = output[0].tolist()
+        obj_class = np.argmax(obj_class)
+        with open(os.path.join(f"{os.path.dirname(PATH)}\\EditedTrainingData", file.replace(".png", ".txt")), 'r') as f:
+            content = f.read()
+            print(f"{int(obj_class) == int(content)} {int(obj_class)} {int(content)}")
+            if int(obj_class) == int(content):
+                correct += 1
 
-    cv2.rectangle(frame, (int(obj_x1 * frame.shape[1]), int(obj_y1 * frame.shape[0])), (int(obj_x2 * frame.shape[1]), int(obj_y2 * frame.shape[0])), (255, 255, 255), 2)
-
-    cv2.putText(frame, f"FPS: {round(1 / (time.time() - start), 1)}", (5, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
-
-    cv2.imshow('frame', frame)
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
-
-cv2.destroyAllWindows()
+print(f"Accuracy: {correct/total*100}%")

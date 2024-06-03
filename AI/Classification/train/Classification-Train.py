@@ -26,6 +26,7 @@ MODEL_PATH = PATH + "\\ModelFiles\\Models"
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 NUM_EPOCHS = 200
 BATCH_SIZE = 200
+CLASSES = 10
 IMG_WIDTH = 28
 IMG_HEIGHT = 28
 IMG_BINARIZE = False
@@ -36,18 +37,6 @@ DROPOUT = 0.5
 PATIENCE = 10
 SHUFFLE = True
 PIN_MEMORY = True
-
-OUTPUTS = "N/A"
-for file in os.listdir(DATA_PATH):
-    if file.endswith(".txt"):
-        with open(os.path.join(DATA_PATH, file), 'r') as f:
-                content = str(f.read()).split(',')
-                user_input = [float(i) for i in content]
-                OUTPUTS = len(user_input)
-                break
-if OUTPUTS == "N/A":
-    print("No user inputs found, exiting...")
-    exit()
 
 IMG_COUNT = 0
 for file in os.listdir(DATA_PATH):
@@ -72,7 +61,7 @@ print()
 print(timestamp() + "Training settings:")
 print(timestamp() + "> Epochs:", NUM_EPOCHS)
 print(timestamp() + "> Batch size:", BATCH_SIZE)
-print(timestamp() + "> Outputs:", OUTPUTS)
+print(timestamp() + "> Classes:", CLASSES)
 print(timestamp() + "> Images:", IMG_COUNT)
 print(timestamp() + "> Image width:", IMG_WIDTH)
 print(timestamp() + "> Image height:", IMG_HEIGHT)
@@ -92,10 +81,7 @@ print(timestamp() + "Loading...")
 def load_data():
     images = []
     user_inputs = []
-    processed_files = 0
-    total_files = len([file for file in os.listdir(DATA_PATH) if file.endswith(".png")])
     print(f"\r{timestamp()}Loading dataset...", end='', flush=True)
-
     for file in os.listdir(DATA_PATH):
         if file.endswith(".png"):
             img = Image.open(os.path.join(DATA_PATH, file)).convert('L')  # Convert to grayscale
@@ -108,34 +94,26 @@ def load_data():
             user_inputs_file = os.path.join(DATA_PATH, file.replace(".png", ".txt"))
             if os.path.exists(user_inputs_file):
                 with open(user_inputs_file, 'r') as f:
-                    content = str(f.read()).split(',')
-                    user_input = [float(i) for i in content]
+                    content = str(f.read())
+                    if content.isdigit() and 0 <= int(content) < CLASSES:
+                        user_input = [0] * CLASSES
+                        user_input[int(content)] = 1
                 images.append(img)
                 user_inputs.append(user_input)
+            else:
+                pass
 
-            if len(images) == BATCH_SIZE:
-                print(f"\r{timestamp()}Loading dataset... ({round(100 * processed_files / total_files)}%)", end='', flush=True)
-                yield np.array(images, dtype=np.float32), np.array(user_inputs, dtype=np.float32)
-                images = []
-                user_inputs = []
+        if len(images) % 100 == 0:
+            print(f"\r{timestamp()}Loading dataset... ({round(100 * len(images) / IMG_COUNT)}%)", end='', flush=True)
 
-            processed_files += 1
-
-    if images:
-        print(f"\r{timestamp()}Loading dataset... ({round(100 * processed_files / total_files)}%)", end='', flush=True)
-        yield np.array(images, dtype=np.float32), np.array(user_inputs, dtype=np.float32)
-
-    print(f"\r{timestamp()}Loading dataset... (100%)", end='', flush=True)
+    return np.array(images, dtype=np.float32), np.array(user_inputs, dtype=np.float32)
 
 # Custom dataset class
 class CustomDataset(Dataset):
-    def __init__(self, transform=None):
+    def __init__(self, images, user_inputs, transform=None):
+        self.images = images
+        self.user_inputs = user_inputs
         self.transform = transform
-        self.images = []
-        self.user_inputs = []
-        for images, user_inputs in load_data():
-            self.images.extend(images)
-            self.user_inputs.extend(user_inputs)
 
     def __len__(self):
         return len(self.images)
@@ -156,7 +134,7 @@ class ConvolutionalNeuralNetwork(nn.Module):
         self.conv3 = nn.Conv2d(32, 64, 3, padding=1)
         self._to_linear = 64 * (IMG_WIDTH // 8) * (IMG_HEIGHT // 8)
         self.fc1 = nn.Linear(self._to_linear, 500)
-        self.fc2 = nn.Linear(500, OUTPUTS)
+        self.fc2 = nn.Linear(500, CLASSES)
         self.dropout = nn.Dropout(DROPOUT)
 
     def forward(self, x):
@@ -170,13 +148,21 @@ class ConvolutionalNeuralNetwork(nn.Module):
         return x
 
 def main():
+    # Load data
+    images, user_inputs = load_data()
+
     # Transformations
     transform = transforms.Compose([
         transforms.ToTensor(),
     ])
 
-    # Load the dataset
-    dataset = CustomDataset(transform=transform)
+    # Create dataset
+    dataset = CustomDataset(images, user_inputs, transform=transform)
+
+    # Initialize model, loss function, and optimizer
+    model = ConvolutionalNeuralNetwork().to(DEVICE)
+    criterion = nn.MSELoss()
+    optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
     # Split the dataset into training and validation sets
     train_size = int(TRAIN_VAL_RATIO * len(dataset))
@@ -184,11 +170,6 @@ def main():
     train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
     train_dataloader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=SHUFFLE, num_workers=NUM_WORKERS, pin_memory=PIN_MEMORY)
     val_dataloader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=SHUFFLE, num_workers=NUM_WORKERS, pin_memory=PIN_MEMORY)
-
-    # Initialize model, loss function, and optimizer
-    model = ConvolutionalNeuralNetwork().to(DEVICE)
-    criterion = nn.MSELoss()
-    optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
     # Early stopping variables
     best_validation_loss = float('inf')

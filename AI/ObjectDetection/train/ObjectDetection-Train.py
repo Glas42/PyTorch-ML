@@ -92,6 +92,7 @@ print(timestamp() + "Loading...")
 def load_data():
     images = []
     user_inputs = []
+    print(f"\r{timestamp()}Loading dataset...", end='', flush=True)
     for file in os.listdir(DATA_PATH):
         if file.endswith(".png"):
             img = Image.open(os.path.join(DATA_PATH, file)).convert('L')  # Convert to grayscale
@@ -110,6 +111,9 @@ def load_data():
                 user_inputs.append(user_input)
             else:
                 pass
+
+    if len(images) % 100 == 0:
+        print(f"\r{timestamp()}Loading dataset... ({round(100 * len(images) / IMG_COUNT)}%)", end='', flush=True)
 
     return np.array(images, dtype=np.float32), np.array(user_inputs, dtype=np.float32)
 
@@ -137,16 +141,16 @@ class ConvolutionalNeuralNetwork(nn.Module):
         self.pool = nn.MaxPool2d(2, 2)
         self.conv2 = nn.Conv2d(16, 32, 3, padding=1)
         self.conv3 = nn.Conv2d(32, 64, 3, padding=1)
-        self._to_linear = 64 * 52 * 27
+        self._to_linear = 64 * (IMG_WIDTH // 8) * (IMG_HEIGHT // 8)
         self.fc1 = nn.Linear(self._to_linear, 500)
         self.fc2 = nn.Linear(500, OUTPUTS)
         self.dropout = nn.Dropout(DROPOUT)
 
     def forward(self, x):
-        x = self.pool(F.relu(self.conv1(x)))  # 420x220 -> 210x110
-        x = self.pool(F.relu(self.conv2(x)))  # 210x110 -> 105x55
-        x = self.pool(F.relu(self.conv3(x)))  # 105x55 -> 52x27
-        x = x.view(-1, self._to_linear)  # Flatten the tensor
+        x = self.pool(F.relu(self.conv1(x)))
+        x = self.pool(F.relu(self.conv2(x)))
+        x = self.pool(F.relu(self.conv3(x)))
+        x = x.view(-1, self._to_linear)
         x = F.relu(self.fc1(x))
         x = self.dropout(x)
         x = self.fc2(x)
@@ -196,7 +200,7 @@ def main():
     # Tensorboard setup
     summary_writer = SummaryWriter(f"{PATH}/AI/ObjectDetection/logs", comment="ObjectDetection-Training", flush_secs=20)
 
-    print(timestamp() + "Starting training...")
+    print(f"\r{timestamp()}Starting training...                       ")
     print("\n-----------------------------------------------------------------------------------------------------------\n")
 
     training_time_prediction = time.time()
