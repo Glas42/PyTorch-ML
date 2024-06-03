@@ -74,171 +74,169 @@ if os.name == "nt":
 
 print("Please annotate the images!")
 index = 0
-while index < len(images):
+while True:
+
     image, file = images[index]
-    while True:
 
-        frame = background.copy()
-        frame_width = frame.shape[1]
-        frame_height = frame.shape[0]
+    frame = background.copy()
+    frame_width = frame.shape[1]
+    frame_height = frame.shape[0]
 
-        if ctypes.windll.user32.GetKeyState(0x01) & 0x8000 != 0 and ctypes.windll.user32.GetForegroundWindow() == ctypes.windll.user32.FindWindowW(None, window_name):
-            left_clicked = True
-        else:
-            left_clicked = False
+    if ctypes.windll.user32.GetKeyState(0x01) & 0x8000 != 0 and ctypes.windll.user32.GetForegroundWindow() == ctypes.windll.user32.FindWindowW(None, window_name):
+        left_clicked = True
+    else:
+        left_clicked = False
 
+    try:
+        window_x, window_y, window_width, window_height = cv2.getWindowImageRect(window_name)
+        mouse_x, mouse_y = mouse.get_position()
+        mouse_relative_window = mouse_x-window_x, mouse_y-window_y
+        last_window_size = (window_x, window_y, window_width, window_height)
+        last_mouse_position = (mouse_x, mouse_y)
+    except:
         try:
-            window_x, window_y, window_width, window_height = cv2.getWindowImageRect(window_name)
-            mouse_x, mouse_y = mouse.get_position()
-            mouse_relative_window = mouse_x-window_x, mouse_y-window_y
-            last_window_size = (window_x, window_y, window_width, window_height)
-            last_mouse_position = (mouse_x, mouse_y)
+            window_x, window_y, window_width, window_height = last_window_size
         except:
-            try:
-                window_x, window_y, window_width, window_height = last_window_size
-            except:
-                window_x, window_y, window_width, window_height = (0, 0, 100, 100)
-            try:
-                mouse_x, mouse_y = last_mouse_position
-            except:
-                mouse_x, mouse_y = (0, 0)
-            mouse_relative_window = mouse_x-window_x, mouse_y-window_y
-            cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
-            cv2.resizeWindow(window_name, frame_width, frame_height)
-            if os.name == "nt":
-                hwnd = win32gui.FindWindow(None, window_name)
-                windll.dwmapi.DwmSetWindowAttribute(hwnd, 35, byref(c_int(0x000000)), sizeof(c_int))
+            window_x, window_y, window_width, window_height = (0, 0, 100, 100)
+        try:
+            mouse_x, mouse_y = last_mouse_position
+        except:
+            mouse_x, mouse_y = (0, 0)
+        mouse_relative_window = mouse_x-window_x, mouse_y-window_y
+        cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+        cv2.resizeWindow(window_name, frame_width, frame_height)
+        if os.name == "nt":
+            hwnd = win32gui.FindWindow(None, window_name)
+            windll.dwmapi.DwmSetWindowAttribute(hwnd, 35, byref(c_int(0x000000)), sizeof(c_int))
 
-        if window_width != 0 and window_height != 0:
-            mouse_x = mouse_relative_window[0]/window_width
-            mouse_y = mouse_relative_window[1]/window_height
+    if window_width != 0 and window_height != 0:
+        mouse_x = mouse_relative_window[0]/window_width
+        mouse_y = mouse_relative_window[1]/window_height
+    else:
+        mouse_x = 0
+        mouse_y = 0
+
+
+    image_resized = cv2.resize(image, (frame_width//2, frame_height))
+    frame[0:image_resized.shape[0], 0:image_resized.shape[1]] = image_resized
+
+
+    button_class_0_pressed, button_class_0_hovered = make_button(text="Red (Class 0)",
+                                                            x1=0.52*frame_width,
+                                                            y1=0.25*frame_height,
+                                                            x2=0.98*frame_width,
+                                                            y2=0.4*frame_height,
+                                                            round_corners=30,
+                                                            buttoncolor=(0, 0, 200),
+                                                            buttonhovercolor=(20, 20, 220),
+                                                            buttonselectedcolor=(20, 20, 220),
+                                                            textcolor=(255, 255, 255),
+                                                            width_scale=0.95,
+                                                            height_scale=0.5)
+
+    button_class_1_pressed, button_class_1_hovered = make_button(text="Yellow (Class 1)",
+                                                            x1=0.52*frame_width,
+                                                            y1=0.425*frame_height,
+                                                            x2=0.98*frame_width,
+                                                            y2=0.575*frame_height,
+                                                            round_corners=30,
+                                                            buttoncolor=(0, 200, 200),
+                                                            buttonhovercolor=(20, 220, 220),
+                                                            buttonselectedcolor=(20, 220, 220),
+                                                            textcolor=(255, 255, 255),
+                                                            width_scale=0.95,
+                                                            height_scale=0.5)
+
+    button_class_2_pressed, button_class_2_hovered = make_button(text="Green (Class 2)",
+                                                            x1=0.52*frame_width,
+                                                            y1=0.6*frame_height,
+                                                            x2=0.98*frame_width,
+                                                            y2=0.75*frame_height,
+                                                            round_corners=30,
+                                                            buttoncolor=(0, 200, 0),
+                                                            buttonhovercolor=(20, 220, 20),
+                                                            buttonselectedcolor=(20, 220, 20),
+                                                            textcolor=(255, 255, 255),
+                                                            width_scale=0.95,
+                                                            height_scale=0.5)
+
+    button_class_3_pressed, button_class_3_hovered = make_button(text="Nothing (Class 3)",
+                                                            x1=0.52*frame_width,
+                                                            y1=0.83*frame_height,
+                                                            x2=0.98*frame_width,
+                                                            y2=0.98*frame_height,
+                                                            round_corners=30,
+                                                            buttoncolor=(200, 0, 0),
+                                                            buttonhovercolor=(220, 20, 20),
+                                                            buttonselectedcolor=(220, 20, 20),
+                                                            textcolor=(255, 255, 255),
+                                                            width_scale=0.95,
+                                                            height_scale=0.5)
+
+    button_back_pressed, button_back_hovered = make_button(text="<--",
+                                                            x1=0.52*frame_width,
+                                                            y1=0.02*frame_height,
+                                                            x2=0.74*frame_width,
+                                                            y2=0.17*frame_height,
+                                                            round_corners=30,
+                                                            buttoncolor=(200, 0, 0),
+                                                            buttonhovercolor=(220, 20, 20),
+                                                            buttonselectedcolor=(220, 20, 20),
+                                                            textcolor=(255, 255, 255),
+                                                            width_scale=0.95,
+                                                            height_scale=0.5)
+
+    button_forward_pressed, button_forward_hovered = make_button(text="-->",
+                                                            x1=0.76*frame_width,
+                                                            y1=0.02*frame_height,
+                                                            x2=0.98*frame_width,
+                                                            y2=0.17*frame_height,
+                                                            round_corners=30,
+                                                            buttoncolor=(200, 0, 0),
+                                                            buttonhovercolor=(220, 20, 20),
+                                                            buttonselectedcolor=(220, 20, 20),
+                                                            textcolor=(255, 255, 255),
+                                                            width_scale=0.95,
+                                                            height_scale=0.5)
+
+
+    if button_class_0_pressed == True:
+        cv2.imwrite(os.path.join(f"{PATH}EditedTrainingData/{file}"), image)
+        with open(os.path.join(f"{PATH}EditedTrainingData/{file.replace('.png', '.txt')}"), 'w') as f:
+            f.write("0")
+            f.close()
+        index += 1
+    elif button_class_1_pressed == True:
+        cv2.imwrite(os.path.join(f"{PATH}EditedTrainingData/{file}"), image)
+        with open(os.path.join(f"{PATH}EditedTrainingData/{file.replace('.png', '.txt')}"), 'w') as f:
+            f.write("1")
+            f.close()
+        index += 1
+    elif button_class_2_pressed == True:
+        cv2.imwrite(os.path.join(f"{PATH}EditedTrainingData/{file}"), image)
+        with open(os.path.join(f"{PATH}EditedTrainingData/{file.replace('.png', '.txt')}"), 'w') as f:
+            f.write("2")
+            f.close()
+        index += 1
+    elif button_class_3_pressed == True:
+        cv2.imwrite(os.path.join(f"{PATH}EditedTrainingData/{file}"), image)
+        with open(os.path.join(f"{PATH}EditedTrainingData/{file.replace('.png', '.txt')}"), 'w') as f:
+            f.write("3")
+            f.close()
+        index += 1
+    elif button_back_pressed == True:
+        if index > 0:
+            index -= 1
         else:
-            mouse_x = 0
-            mouse_y = 0
-
-
-        image_resized = cv2.resize(image, (frame_width//2, frame_height))
-        frame[0:image_resized.shape[0], 0:image_resized.shape[1]] = image_resized
-
-
-        button_class_0_pressed, button_class_0_hovered = make_button(text="Red (Class 0)",
-                                                             x1=0.52*frame_width,
-                                                             y1=0.25*frame_height,
-                                                             x2=0.98*frame_width,
-                                                             y2=0.4*frame_height,
-                                                             round_corners=30,
-                                                             buttoncolor=(0, 0, 200),
-                                                             buttonhovercolor=(20, 20, 220),
-                                                             buttonselectedcolor=(20, 20, 220),
-                                                             textcolor=(255, 255, 255),
-                                                             width_scale=0.95,
-                                                             height_scale=0.5)
-
-        button_class_1_pressed, button_class_1_hovered = make_button(text="Yellow (Class 1)",
-                                                             x1=0.52*frame_width,
-                                                             y1=0.425*frame_height,
-                                                             x2=0.98*frame_width,
-                                                             y2=0.575*frame_height,
-                                                             round_corners=30,
-                                                             buttoncolor=(0, 200, 200),
-                                                             buttonhovercolor=(20, 220, 220),
-                                                             buttonselectedcolor=(20, 220, 220),
-                                                             textcolor=(255, 255, 255),
-                                                             width_scale=0.95,
-                                                             height_scale=0.5)
-
-        button_class_2_pressed, button_class_2_hovered = make_button(text="Green (Class 2)",
-                                                             x1=0.52*frame_width,
-                                                             y1=0.6*frame_height,
-                                                             x2=0.98*frame_width,
-                                                             y2=0.75*frame_height,
-                                                             round_corners=30,
-                                                             buttoncolor=(0, 200, 0),
-                                                             buttonhovercolor=(20, 220, 20),
-                                                             buttonselectedcolor=(20, 220, 20),
-                                                             textcolor=(255, 255, 255),
-                                                             width_scale=0.95,
-                                                             height_scale=0.5)
-
-        button_class_3_pressed, button_class_3_hovered = make_button(text="Nothing (Class 3)",
-                                                             x1=0.52*frame_width,
-                                                             y1=0.83*frame_height,
-                                                             x2=0.98*frame_width,
-                                                             y2=0.98*frame_height,
-                                                             round_corners=30,
-                                                             buttoncolor=(200, 0, 0),
-                                                             buttonhovercolor=(220, 20, 20),
-                                                             buttonselectedcolor=(220, 20, 20),
-                                                             textcolor=(255, 255, 255),
-                                                             width_scale=0.95,
-                                                             height_scale=0.5)
-
-        button_back_pressed, button_back_hovered = make_button(text="<--",
-                                                             x1=0.52*frame_width,
-                                                             y1=0.02*frame_height,
-                                                             x2=0.74*frame_width,
-                                                             y2=0.17*frame_height,
-                                                             round_corners=30,
-                                                             buttoncolor=(200, 0, 0),
-                                                             buttonhovercolor=(220, 20, 20),
-                                                             buttonselectedcolor=(220, 20, 20),
-                                                             textcolor=(255, 255, 255),
-                                                             width_scale=0.95,
-                                                             height_scale=0.5)
-
-        button_forward_pressed, button_forward_hovered = make_button(text="-->",
-                                                             x1=0.76*frame_width,
-                                                             y1=0.02*frame_height,
-                                                             x2=0.98*frame_width,
-                                                             y2=0.17*frame_height,
-                                                             round_corners=30,
-                                                             buttoncolor=(200, 0, 0),
-                                                             buttonhovercolor=(220, 20, 20),
-                                                             buttonselectedcolor=(220, 20, 20),
-                                                             textcolor=(255, 255, 255),
-                                                             width_scale=0.95,
-                                                             height_scale=0.5)
-
-
-        if button_class_0_pressed == True:
-            cv2.imwrite(os.path.join(f"{PATH}EditedTrainingData/{file}"), image)
-            with open(os.path.join(f"{PATH}EditedTrainingData/{file.replace('.png', '.txt')}"), 'w') as f:
-                f.write("0")
-                f.close()
+            index = 0
+    elif button_forward_pressed == True:
+        if index < len(images) - 1:
             index += 1
-            break
-        elif button_class_1_pressed == True:
-            cv2.imwrite(os.path.join(f"{PATH}EditedTrainingData/{file}"), image)
-            with open(os.path.join(f"{PATH}EditedTrainingData/{file.replace('.png', '.txt')}"), 'w') as f:
-                f.write("1")
-                f.close()
-            index += 1
-            break
-        elif button_class_2_pressed == True:
-            cv2.imwrite(os.path.join(f"{PATH}EditedTrainingData/{file}"), image)
-            with open(os.path.join(f"{PATH}EditedTrainingData/{file.replace('.png', '.txt')}"), 'w') as f:
-                f.write("2")
-                f.close()
-            index += 1
-            break
-        elif button_class_3_pressed == True:
-            cv2.imwrite(os.path.join(f"{PATH}EditedTrainingData/{file}"), image)
-            with open(os.path.join(f"{PATH}EditedTrainingData/{file.replace('.png', '.txt')}"), 'w') as f:
-                f.write("3")
-                f.close()
-            index += 1
-            break
-        elif button_back_pressed == True:
-            if index > 0:
-                index -= 1
-            else:
-                index = 0
-            break
-        elif button_forward_pressed == True:
-            index += 1
+        else:
+            print("Done!")
             break
 
-        last_left_clicked = left_clicked
+    last_left_clicked = left_clicked
 
-        cv2.imshow(window_name, frame)
-        cv2.waitKey(1)
+    cv2.imshow(window_name, frame)
+    cv2.waitKey(1)
