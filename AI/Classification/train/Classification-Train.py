@@ -24,17 +24,18 @@ PATH = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)
 DATA_PATH = PATH + "\\ModelFiles\\EditedTrainingData"
 MODEL_PATH = PATH + "\\ModelFiles\\Models"
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-NUM_EPOCHS = 200
-BATCH_SIZE = 200
+NUM_EPOCHS = 1000
+BATCH_SIZE = 500
 CLASSES = 4
 IMG_WIDTH = 80
 IMG_HEIGHT = 160
 IMG_BINARIZE = False
-LEARNING_RATE = 0.0001
+IMG_GRAYSCALE = False
+LEARNING_RATE = 0.00001
 TRAIN_VAL_RATIO = 0.8
 NUM_WORKERS = 0
 DROPOUT = 0.5
-PATIENCE = 10
+PATIENCE = 100
 SHUFFLE = True
 PIN_MEMORY = True
 
@@ -45,6 +46,8 @@ for file in os.listdir(DATA_PATH):
 if IMG_COUNT == 0:
     print("No images found, exiting...")
     exit()
+
+COLOR_CHANNELS = 1 if IMG_GRAYSCALE or IMG_BINARIZE else 3
 
 RED = "\033[91m"
 GREEN = "\033[92m"
@@ -66,6 +69,8 @@ print(timestamp() + "> Images:", IMG_COUNT)
 print(timestamp() + "> Image width:", IMG_WIDTH)
 print(timestamp() + "> Image height:", IMG_HEIGHT)
 print(timestamp() + "> Binarize image:", IMG_BINARIZE)
+print(timestamp() + "> Grayscale image:", IMG_GRAYSCALE)
+print(timestamp() + "> Color channels:", COLOR_CHANNELS)
 print(timestamp() + "> Learning rate:", LEARNING_RATE)
 print(timestamp() + "> Dataset split:", TRAIN_VAL_RATIO)
 print(timestamp() + "> Number of workers:", NUM_WORKERS)
@@ -84,7 +89,10 @@ def load_data():
     print(f"\r{timestamp()}Loading dataset...", end='', flush=True)
     for file in os.listdir(DATA_PATH):
         if file.endswith(".png"):
-            img = Image.open(os.path.join(DATA_PATH, file)).convert('L')  # Convert to grayscale
+            if IMG_GRAYSCALE or IMG_BINARIZE:
+                img = Image.open(os.path.join(DATA_PATH, file)).convert('L')  # Convert to grayscale
+            else:
+                img = Image.open(os.path.join(DATA_PATH, file))
             img = np.array(img)
             img = cv2.resize(img, (IMG_WIDTH, IMG_HEIGHT))
             img = img / 255.0  # Normalize the image
@@ -128,7 +136,7 @@ class CustomDataset(Dataset):
 class ConvolutionalNeuralNetwork(nn.Module):
     def __init__(self):
         super(ConvolutionalNeuralNetwork, self).__init__()
-        self.conv1 = nn.Conv2d(1, 16, 3, padding=1)  # Input channels = 1 for grayscale/binary images
+        self.conv1 = nn.Conv2d(COLOR_CHANNELS, 16, 3, padding=1)
         self.pool = nn.MaxPool2d(2, 2)
         self.conv2 = nn.Conv2d(16, 32, 3, padding=1)
         self.conv3 = nn.Conv2d(32, 64, 3, padding=1)
@@ -175,6 +183,8 @@ def main():
     best_validation_loss = float('inf')
     best_model = None
     best_model_epoch = None
+    best_model_training_loss = None
+    best_model_validation_loss = None
     wait = 0
 
     # Create tensorboard logs folder if it doesn't exist
@@ -221,7 +231,7 @@ def main():
             if progress < 0: progress = 0
 
             progress = '█' * int(progress * 10) + '░' * (10 - int(progress * 10))
-            epoch_time = round((epoch_total_time) if epoch_total_time > 1 else (epoch_total_time) * 1000, 2)
+            epoch_time = round(epoch_total_time, 2) if epoch_total_time > 1 else round((epoch_total_time) * 1000)
             eta = time.strftime('%H:%M:%S', time.gmtime(round((training_time_prediction - training_start_time) / (training_epoch + 1) * NUM_EPOCHS - (training_time_prediction - training_start_time) + (training_time_prediction - time.time()), 2)))
 
             print(f"\r{progress} Epoch {training_epoch+1}, Train Loss: {num_to_str(training_loss)}, Val Loss: {num_to_str(validation_loss)}, {epoch_time}{'s' if epoch_total_time > 1 else 'ms'}/Epoch, ETA: {eta}                       ", end='', flush=True)
@@ -281,6 +291,8 @@ def main():
             best_validation_loss = validation_loss
             best_model = model
             best_model_epoch = epoch
+            best_model_training_loss = training_loss
+            best_model_validation_loss = validation_loss
             wait = 0
         else:
             wait += 1
@@ -327,11 +339,75 @@ def main():
 
     # Save the last model
     print(timestamp() + "Saving the last model...")
+
+    model.eval()
+    total_train = 0
+    correct_train = 0
+    with torch.no_grad():
+        for data in train_dataloader:
+            images, labels = data
+            images, labels = images.to(DEVICE), labels.to(DEVICE)
+            outputs = model(images)
+            _, predicted = torch.max(outputs.data, 1)
+            total_train += labels.size(0)
+            correct_train += (predicted == torch.argmax(labels, dim=1)).sum().item()
+    training_dataset_accuracy = str(round(100 * (correct_train / total_train), 2)) + "%"
+
+    total_val = 0
+    correct_val = 0
+    with torch.no_grad():
+        for data in val_dataloader:
+            images, labels = data
+            images, labels = images.to(DEVICE), labels.to(DEVICE)
+            outputs = model(images)
+            _, predicted = torch.max(outputs.data, 1)
+            total_val += labels.size(0)
+            correct_val += (predicted == torch.argmax(labels, dim=1)).sum().item()
+    validation_dataset_accuracy = str(round(100 * (correct_val / total_val), 2)) + "%"
+
+    metadata_optimizer = str(optimizer).replace('\n', '')
+    metadata_criterion = str(criterion).replace('\n', '')
+    metadata_model = str(model).replace('\n', '')
+    metadata = (f"epochs#{epoch+1}",
+                f"batch#{BATCH_SIZE}",
+                f"classes#{CLASSES}",
+                f"outputs#{CLASSES}",
+                f"image_count#{IMG_COUNT}",
+                f"image_width#{IMG_WIDTH}",
+                f"image_height#{IMG_HEIGHT}",
+                f"image_binarize#{IMG_BINARIZE}",
+                f"image_grayscale#{IMG_GRAYSCALE}",
+                f"color_channels#{COLOR_CHANNELS}",
+                f"learning_rate#{LEARNING_RATE}",
+                f"dataset_split#{TRAIN_VAL_RATIO}",
+                f"number_of_workers#{NUM_WORKERS}",
+                f"dropout#{DROPOUT}",
+                f"patience#{PATIENCE}",
+                f"shuffle#{SHUFFLE}",
+                f"pin_memory#{PIN_MEMORY}",
+                f"training_time#{TRAINING_TIME}",
+                f"training_date#{TRAINING_DATE}",
+                f"training_device#{DEVICE}",
+                f"training_os#{os.name}",
+                f"architecture#{metadata_model}",
+                f"torch_version#{torch.__version__}",
+                f"numpy_version#{np.__version__}",
+                f"pil_version#{Image.__version__}",
+                f"transform#{transform}",
+                f"optimizer#{metadata_optimizer}",
+                f"loss_function#{metadata_criterion}",
+                f"training_loss#{best_model_training_loss}",
+                f"validation_loss#{best_model_validation_loss}",
+                f"training_dataset_accuracy#{training_dataset_accuracy}",
+                f"validation_dataset_accuracy#{validation_dataset_accuracy}")
+    metadata = {"data": metadata}
+    metadata = {data: str(value).encode("ascii") for data, value in metadata.items()}
+
     last_model_saved = False
     for i in range(5):
         try:
             last_model = torch.jit.script(model)
-            torch.jit.save(last_model, os.path.join(MODEL_PATH, f"ClassificationModel-LAST_EPOCHS-{epoch+1}_BATCH-{BATCH_SIZE}_IMG_WIDTH-{IMG_WIDTH}_IMG_HEIGHT-{IMG_HEIGHT}_IMG_COUNT-{IMG_COUNT}_TIME-{TRAINING_TIME}_DATE-{TRAINING_DATE}.pt"))
+            torch.jit.save(last_model, os.path.join(MODEL_PATH, f"ClassificationModel-LAST-{TRAINING_DATE}.pt"), _extra_files=metadata)
             last_model_saved = True
             break
         except:
@@ -340,11 +416,75 @@ def main():
 
     # Save the best model
     print(timestamp() + "Saving the best model...")
+
+    best_model.eval()
+    total_train = 0
+    correct_train = 0
+    with torch.no_grad():
+        for data in train_dataloader:
+            images, labels = data
+            images, labels = images.to(DEVICE), labels.to(DEVICE)
+            outputs = best_model(images)
+            _, predicted = torch.max(outputs.data, 1)
+            total_train += labels.size(0)
+            correct_train += (predicted == torch.argmax(labels, dim=1)).sum().item()
+    training_dataset_accuracy = str(round(100 * (correct_train / total_train), 2)) + "%"
+
+    total_val = 0
+    correct_val = 0
+    with torch.no_grad():
+        for data in val_dataloader:
+            images, labels = data
+            images, labels = images.to(DEVICE), labels.to(DEVICE)
+            outputs = best_model(images)
+            _, predicted = torch.max(outputs.data, 1)
+            total_val += labels.size(0)
+            correct_val += (predicted == torch.argmax(labels, dim=1)).sum().item()
+    validation_dataset_accuracy = str(round(100 * (correct_val / total_val), 2)) + "%"
+
+    metadata_optimizer = str(optimizer).replace('\n', '')
+    metadata_criterion = str(criterion).replace('\n', '')
+    metadata_model = str(best_model).replace('\n', '')
+    metadata = (f"epochs#{best_model_epoch+1}",
+                f"batch#{BATCH_SIZE}",
+                f"classes#{CLASSES}",
+                f"outputs#{CLASSES}",
+                f"image_count#{IMG_COUNT}",
+                f"image_width#{IMG_WIDTH}",
+                f"image_height#{IMG_HEIGHT}",
+                f"image_binarize#{IMG_BINARIZE}",
+                f"image_grayscale#{IMG_GRAYSCALE}",
+                f"color_channels#{COLOR_CHANNELS}",
+                f"learning_rate#{LEARNING_RATE}",
+                f"dataset_split#{TRAIN_VAL_RATIO}",
+                f"number_of_workers#{NUM_WORKERS}",
+                f"dropout#{DROPOUT}",
+                f"patience#{PATIENCE}",
+                f"shuffle#{SHUFFLE}",
+                f"pin_memory#{PIN_MEMORY}",
+                f"training_time#{TRAINING_TIME}",
+                f"training_date#{TRAINING_DATE}",
+                f"training_device#{DEVICE}",
+                f"training_os#{os.name}",
+                f"architecture#{metadata_model}",
+                f"torch_version#{torch.__version__}",
+                f"numpy_version#{np.__version__}",
+                f"pil_version#{Image.__version__}",
+                f"transform#{transform}",
+                f"optimizer#{metadata_optimizer}",
+                f"loss_function#{metadata_criterion}",
+                f"training_loss#{training_loss}",
+                f"validation_loss#{validation_loss}",
+                f"training_dataset_accuracy#{training_dataset_accuracy}",
+                f"validation_dataset_accuracy#{validation_dataset_accuracy}")
+    metadata = {"data": metadata}
+    metadata = {data: str(value).encode("ascii") for data, value in metadata.items()}
+
     best_model_saved = False
     for i in range(5):
         try:
             best_model = torch.jit.script(best_model)
-            torch.jit.save(best_model, os.path.join(MODEL_PATH, f"ClassificationModel-BEST_EPOCHS-{best_model_epoch+1}_BATCH-{BATCH_SIZE}_IMG_WIDTH-{IMG_WIDTH}_IMG_HEIGHT-{IMG_HEIGHT}_IMG_COUNT-{IMG_COUNT}_TIME-{TRAINING_TIME}_DATE-{TRAINING_DATE}.pt"))
+            torch.jit.save(best_model, os.path.join(MODEL_PATH, f"ClassificationModel-BEST-{TRAINING_DATE}.pt"), _extra_files=metadata)
             best_model_saved = True
             break
         except:

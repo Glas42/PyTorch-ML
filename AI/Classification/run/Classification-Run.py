@@ -19,33 +19,26 @@ if MODEL_PATH == "":
 IMG_WIDTH = 80
 IMG_HEIGHT = 160
 
-string = MODEL_PATH.split("\\")[-1]
-epochs = int(string.split("EPOCHS-")[1].split("_")[0])
-batch = int(string.split("BATCH-")[1].split("_")[0])
-img_width = int(string.split("IMG_WIDTH-")[1].split("_")[0])
-img_height = int(string.split("IMG_HEIGHT-")[1].split("_")[0])
-img_count = int(string.split("IMG_COUNT-")[1].split("_")[0])
-training_time = string.split("TIME-")[1].split("_")[0]
-training_date = string.split("DATE-")[1].split(".")[0]
-
 print(f"\nModel: {MODEL_PATH}")
-print(f"\n> Epochs: {epochs}")
-print(f"> Batch: {batch}")
-print(f"> Image Width: {img_width}")
-print(f"> Image Height: {img_height}")
-print(f"> Image Count: {img_count}")
-print(f"> Training Time: {training_time}")
-print(f"> Training Date: {training_date}\n")
 
-model = torch.jit.load(os.path.join(MODEL_PATH), map_location=device)
+metadata = {"data": []}
+model = torch.jit.load(os.path.join(MODEL_PATH), _extra_files=metadata, map_location=device)
 model.eval()
+print(metadata)
 
 transform = transforms.Compose([
     transforms.ToTensor(),
 ])
 
+CLASSES = 1
+
 total = len(os.listdir(f"{os.path.dirname(PATH)}\\EditedTrainingData")) // 2
 correct = 0
+incorrect = 0
+counts = [0] * CLASSES
+confidences = [0] * CLASSES
+highest = [0] * CLASSES
+lowest = [1] * CLASSES
 
 for file in os.listdir(f"{os.path.dirname(PATH)}\\EditedTrainingData"):
     if file.endswith(".png"):
@@ -54,15 +47,34 @@ for file in os.listdir(f"{os.path.dirname(PATH)}\\EditedTrainingData"):
         frame = cv2.resize(frame, (IMG_WIDTH, IMG_HEIGHT))
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
+        frame = transform(frame).unsqueeze(0).to(device)
         with torch.no_grad():
-            output = model(transform(frame).unsqueeze(0).to(device))
+            output = np.array(model(frame)[0].tolist())
 
-        obj_class = output[0].tolist()
-        obj_class = np.argmax(obj_class)
+        probabilities = np.exp(output - np.max(output)) / np.sum(np.exp(output - np.max(output)))
+        obj_confidence = np.max(probabilities)
+        obj_class = np.argmax(probabilities)
+
+        counts[obj_class] += 1
+        confidences[obj_class] += obj_confidence
+        if obj_confidence > highest[obj_class]:
+            highest[obj_class] = obj_confidence
+        if obj_confidence < lowest[obj_class]:
+            lowest[obj_class] = obj_confidence
+
         with open(os.path.join(f"{os.path.dirname(PATH)}\\EditedTrainingData", file.replace(".png", ".txt")), 'r') as f:
             content = f.read()
-            print(f"{int(obj_class) == int(content)} {int(obj_class)} {int(content)}")
             if int(obj_class) == int(content):
                 correct += 1
+            else:
+                incorrect += 1
 
+for i in range(len(confidences)):
+    confidence = confidences[i]
+    print(f"Avg confidence of class {i}: {confidence / counts[i]}")
+for i in range(len(highest)):
+    print(f"Highest confidence of class {i}: {highest[i]}")
+for i in range(len(lowest)):
+    print(f"Lowest confidence of class {i}: {lowest[i]}")
+print(f"Correct: {correct}\nIncorrect: {incorrect}")
 print(f"Accuracy: {correct/total*100}%")
