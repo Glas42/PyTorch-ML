@@ -24,8 +24,8 @@ PATH = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)
 DATA_PATH = PATH + "\\ModelFiles\\EditedTrainingData"
 MODEL_PATH = PATH + "\\ModelFiles\\Models"
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-NUM_EPOCHS = 1000
-BATCH_SIZE = 500
+NUM_EPOCHS = 5000
+BATCH_SIZE = 1000
 CLASSES = 4
 IMG_WIDTH = 80
 IMG_HEIGHT = 160
@@ -35,7 +35,7 @@ LEARNING_RATE = 0.00001
 TRAIN_VAL_RATIO = 0.8
 NUM_WORKERS = 0
 DROPOUT = 0.5
-PATIENCE = 100
+PATIENCE = 500
 SHUFFLE = True
 PIN_MEMORY = True
 
@@ -144,6 +144,7 @@ class ConvolutionalNeuralNetwork(nn.Module):
         self.fc1 = nn.Linear(self._to_linear, 500)
         self.fc2 = nn.Linear(500, CLASSES)
         self.dropout = nn.Dropout(DROPOUT)
+        self.softmax = nn.Softmax(dim=1)
 
     def forward(self, x):
         x = self.pool(F.relu(self.conv1(x)))
@@ -153,6 +154,7 @@ class ConvolutionalNeuralNetwork(nn.Module):
         x = F.relu(self.fc1(x))
         x = self.dropout(x)
         x = self.fc2(x)
+        x = self.softmax(x)
         return x
 
 def main():

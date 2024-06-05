@@ -74,20 +74,22 @@ for file in os.listdir(f"{os.path.dirname(PATH)}\\EditedTrainingData"):
     if file.endswith(".png"):
 
         frame = cv2.imread(os.path.join(f"{os.path.dirname(PATH)}\\EditedTrainingData", file))
+        frame = np.array(frame, dtype=np.float32)
         frame = cv2.resize(frame, (IMG_WIDTH, IMG_HEIGHT))
         if IMG_GRAYSCALE:
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        img = img / 255.0
+        frame = frame / 255.0
         if IMG_BINARIZE:
-            img = cv2.threshold(img, 0.5, 1.0, cv2.THRESH_BINARY)[1]
+            frame = cv2.threshold(frame, 0.5, 1.0, cv2.THRESH_BINARY)[1]
 
         frame = transform(frame).unsqueeze(0).to(device)
         with torch.no_grad():
             output = np.array(model(frame)[0].tolist())
 
-        probabilities = np.exp(output - np.max(output)) / np.sum(np.exp(output - np.max(output)))
-        obj_confidence = np.max(probabilities)
-        obj_class = np.argmax(probabilities)
+        output = output * (1 / sum(output))
+        confidence = [x / sum(output) for x in output]
+        obj_class = np.argmax(output)
+        obj_confidence = confidence[obj_class]
 
         counts[obj_class] += 1
         confidences[obj_class] += obj_confidence
