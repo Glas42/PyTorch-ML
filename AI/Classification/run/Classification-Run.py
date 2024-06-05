@@ -34,6 +34,10 @@ for var in metadata:
         IMG_GRAYSCALE = True if var.split("#")[1] == "True" else False
     if "image_binarize" in var:
         IMG_BINARIZE = True if var.split("#")[1] == "True" else False
+    if "training_dataset_accuracy" in var:
+        print("Training dataset accuracy: " + str(var.split("#")[1]))
+    if "validation_dataset_accuracy" in var:
+        print("Validation dataset accuracy: " + str(var.split("#")[1]))
     if "transform" in var:
         transform = var.replace("\\n", "\n").replace('\\', '').split("#")[1]
         transform_list = []
