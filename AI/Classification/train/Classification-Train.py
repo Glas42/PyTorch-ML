@@ -1,5 +1,5 @@
 import datetime
-print(f"\n------------------------------------\n\n\033[90m[{datetime.datetime.now().strftime('%H:%M:%S')}] \033[0mImporting libraries...")
+print(f"\n----------------------------------------------\n\n\033[90m[{datetime.datetime.now().strftime('%H:%M:%S')}] \033[0mImporting libraries...")
 
 import os
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
@@ -24,18 +24,18 @@ PATH = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)
 DATA_PATH = PATH + "\\ModelFiles\\EditedTrainingData"
 MODEL_PATH = PATH + "\\ModelFiles\\Models"
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-NUM_EPOCHS = 5000
-BATCH_SIZE = 1000
+NUM_EPOCHS = 1000
+BATCH_SIZE = 500
 CLASSES = 4
-IMG_WIDTH = 80
-IMG_HEIGHT = 160
+IMG_WIDTH = 90
+IMG_HEIGHT = 150
 IMG_BINARIZE = False
 IMG_GRAYSCALE = True
 LEARNING_RATE = 0.00001
 TRAIN_VAL_RATIO = 0.8
 NUM_WORKERS = 0
 DROPOUT = 0.5
-PATIENCE = 500
+PATIENCE = 100
 SHUFFLE = True
 PIN_MEMORY = True
 
@@ -56,7 +56,7 @@ NORMAL = "\033[0m"
 def timestamp():
     return DARK_GREY + f"[{datetime.datetime.now().strftime('%H:%M:%S')}] " + NORMAL
 
-print("\n------------------------------------\n")
+print("\n----------------------------------------------\n")
 
 print(timestamp() + f"Using {str(DEVICE).upper()} for training")
 print(timestamp() + 'Number of CPU cores:', multiprocessing.cpu_count())
@@ -79,9 +79,6 @@ print(timestamp() + "> Patience:", PATIENCE)
 print(timestamp() + "> Shuffle:", SHUFFLE)
 print(timestamp() + "> Pin memory:", PIN_MEMORY)
 
-print("\n------------------------------------\n")
-
-print(timestamp() + "Loading...")
 
 def load_data():
     images = []
@@ -136,28 +133,53 @@ class CustomDataset(Dataset):
 class ConvolutionalNeuralNetwork(nn.Module):
     def __init__(self):
         super(ConvolutionalNeuralNetwork, self).__init__()
-        self.conv1 = nn.Conv2d(COLOR_CHANNELS, 16, 3, padding=1)
-        self.pool = nn.MaxPool2d(2, 2)
-        self.conv2 = nn.Conv2d(16, 32, 3, padding=1)
-        self.conv3 = nn.Conv2d(32, 64, 3, padding=1)
-        self._to_linear = 64 * (IMG_WIDTH // 8) * (IMG_HEIGHT // 8)
-        self.fc1 = nn.Linear(self._to_linear, 500)
-        self.fc2 = nn.Linear(500, CLASSES)
-        self.dropout = nn.Dropout(DROPOUT)
-        self.softmax = nn.Softmax(dim=1)
+        self.conv2d_1 = nn.Conv2d(1 if IMG_GRAYSCALE or IMG_BINARIZE else 3, 128, (3, 3))
+        self.relu_1 = nn.ReLU()
+        self.conv2d_2 = nn.Conv2d(128, 256, (3, 3))
+        self.relu_2 = nn.ReLU()
+        self.conv2d_3 = nn.Conv2d(256, 256, (3, 3))
+        self.relu_3 = nn.ReLU()
+        self.flatten = nn.Flatten()
+        self.linear = nn.Linear(256 * (80 - 6) * (160 - 6), CLASSES)
 
     def forward(self, x):
-        x = self.pool(F.relu(self.conv1(x)))
-        x = self.pool(F.relu(self.conv2(x)))
-        x = self.pool(F.relu(self.conv3(x)))
-        x = x.view(-1, self._to_linear)
-        x = F.relu(self.fc1(x))
-        x = self.dropout(x)
-        x = self.fc2(x)
-        x = self.softmax(x)
+        x = self.conv2d_1(x)
+        x = self.relu_1(x)
+        x = self.conv2d_2(x)
+        x = self.relu_2(x)
+        x = self.conv2d_3(x)
+        x = self.relu_3(x)
+        x = self.flatten(x)
+        x = self.linear(x)
         return x
 
 def main():
+    # Initialize model
+    model = ConvolutionalNeuralNetwork().to(DEVICE)
+
+    def get_model_size_mb(model):
+        total_params = 0
+        for param in model.parameters():
+            total_params += np.prod(param.size())
+        trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        non_trainable_params = total_params - trainable_params
+        bytes_per_param = next(model.parameters()).element_size()
+        model_size_mb = (total_params * bytes_per_param) / (1024 ** 2)
+        return total_params, trainable_params, non_trainable_params, model_size_mb
+
+    total_params, trainable_params, non_trainable_params, model_size_mb = get_model_size_mb(model)
+
+    print()
+    print(timestamp() + "Model properties:")
+    print(timestamp() + f"> Total parameters: {total_params}")
+    print(timestamp() + f"> Trainable parameters: {trainable_params}")
+    print(timestamp() + f"> Non-trainable parameters: {non_trainable_params}")
+    print(timestamp() + f"> Predicted model size: {model_size_mb:.2f}MB")
+
+    print("\n----------------------------------------------\n")
+
+    print(timestamp() + "Loading...")
+
     # Load data
     images, user_inputs = load_data()
 
@@ -169,8 +191,7 @@ def main():
     # Create dataset
     dataset = CustomDataset(images, user_inputs, transform=transform)
 
-    # Initialize model, loss function, and optimizer
-    model = ConvolutionalNeuralNetwork().to(DEVICE)
+    # Initialize loss function and optimizer
     criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
@@ -238,7 +259,7 @@ def main():
 
             print(f"\r{progress} Epoch {training_epoch+1}, Train Loss: {num_to_str(training_loss)}, Val Loss: {num_to_str(validation_loss)}, {epoch_time}{'s' if epoch_total_time > 1 else 'ms'}/Epoch, ETA: {eta}                       ", end='', flush=True)
 
-            time.sleep(epoch_total_time/10 if epoch_total_time/10 >= 1 else 1)
+            time.sleep(epoch_total_time/10 if epoch_total_time/10 >= 0.1 else 0.1)
         if PROGRESS_PRINT == "early stopped":
             print(f"\rEarly stopping at Epoch {training_epoch+1}, Train Loss: {num_to_str(training_loss)}, Val Loss: {num_to_str(validation_loss)}                                              ", end='', flush=True)
         elif PROGRESS_PRINT == "finished":
@@ -497,7 +518,7 @@ def main():
             print(timestamp() + "Failed to save the best model. Retrying...")
     print(timestamp() + "Best model saved successfully.") if best_model_saved else print(timestamp() + "Failed to save the best model.")
 
-    print("\n------------------------------------\n")
+    print("\n----------------------------------------------\n")
 
 if __name__ == '__main__':
     main()

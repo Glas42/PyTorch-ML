@@ -82,9 +82,9 @@ for file in os.listdir(f"{os.path.dirname(PATH)}\\EditedTrainingData"):
         frame = cv2.resize(frame, (IMG_WIDTH, IMG_HEIGHT))
         if IMG_GRAYSCALE:
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        frame = frame / 255.0
         if IMG_BINARIZE:
             frame = cv2.threshold(frame, 0.5, 1.0, cv2.THRESH_BINARY)[1]
+        frame = frame / 255.0
 
         frame = transform(frame).unsqueeze(0).to(device)
         with torch.no_grad():
@@ -111,7 +111,7 @@ for file in os.listdir(f"{os.path.dirname(PATH)}\\EditedTrainingData"):
 
 for i in range(len(confidences)):
     confidence = confidences[i]
-    print(f"Avg confidence of class {i}: {confidence / counts[i]}")
+    print(f"Avg confidence of class {i}: {(confidence / counts[i]) if counts[i] > 0 else 'no data'}")
 for i in range(len(highest)):
     print(f"Highest confidence of class {i}: {highest[i]}")
 for i in range(len(lowest)):

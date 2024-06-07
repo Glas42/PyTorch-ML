@@ -80,7 +80,7 @@ while True:
     frame = np.array(frame)
 
     aspect_ratio = IMG_WIDTH / IMG_HEIGHT
-    rows = 10
+    rows = 4
     image_height = frame.shape[0] // rows
     image_width = int(image_height * aspect_ratio)
     cols = frame.shape[1] // image_width
