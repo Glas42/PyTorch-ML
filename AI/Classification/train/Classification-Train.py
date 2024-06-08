@@ -6,6 +6,8 @@ os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 
 from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import Dataset, DataLoader
+from torch.cuda.amp import GradScaler, autocast
+import torch.optim.lr_scheduler as lr_scheduler
 from torchvision import transforms
 import torch.nn.functional as F
 import torch.optim as optim
@@ -25,10 +27,10 @@ DATA_PATH = PATH + "\\ModelFiles\\EditedTrainingData"
 MODEL_PATH = PATH + "\\ModelFiles\\Models"
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 NUM_EPOCHS = 1000
-BATCH_SIZE = 1
+BATCH_SIZE = 100
 CLASSES = 4
-IMG_WIDTH = 90*3
-IMG_HEIGHT = 150*3
+IMG_WIDTH = 90
+IMG_HEIGHT = 150
 IMG_BINARIZE = False
 IMG_GRAYSCALE = True
 LEARNING_RATE = 0.00001
@@ -37,7 +39,7 @@ NUM_WORKERS = 0
 DROPOUT = 0.1
 PATIENCE = 100
 SHUFFLE = True
-PIN_MEMORY = True
+PIN_MEMORY = False
 
 IMG_COUNT = 0
 for file in os.listdir(DATA_PATH):
@@ -127,28 +129,34 @@ class CustomDataset(Dataset):
         image = self.images[idx]
         user_input = self.user_inputs[idx]
         image = self.transform(image)
-        return image, torch.tensor(user_input, dtype=torch.float32)
+        return image, torch.as_tensor(user_input, dtype=torch.float32)
 
 # Define the model
 class ConvolutionalNeuralNetwork(nn.Module):
     def __init__(self):
         super(ConvolutionalNeuralNetwork, self).__init__()
-        self.conv2d_1 = nn.Conv2d(1 if IMG_GRAYSCALE or IMG_BINARIZE else 3, 16, (3, 3))
+        self.conv2d_1 = nn.Conv2d(1 if IMG_GRAYSCALE or IMG_BINARIZE else 3, 16, (3, 3), bias=False)
+        self.bn1 = nn.BatchNorm2d(16)
         self.relu_1 = nn.ReLU()
-        self.conv2d_2 = nn.Conv2d(16, 16, (3, 3))
+        self.conv2d_2 = nn.Conv2d(16, 16, (3, 3), bias=False)
+        self.bn2 = nn.BatchNorm2d(16)
         self.relu_2 = nn.ReLU()
-        self.conv2d_3 = nn.Conv2d(16, 16, (3, 3))
+        self.conv2d_3 = nn.Conv2d(16, 16, (3, 3), bias=False)
+        self.bn3 = nn.BatchNorm2d(16)
         self.relu_3 = nn.ReLU()
         self.flatten = nn.Flatten()
-        self.linear = nn.Linear(16 * (IMG_WIDTH - 6) * (IMG_HEIGHT - 6), CLASSES)
+        self.linear = nn.Linear(16 * (IMG_WIDTH - 6) * (IMG_HEIGHT - 6), CLASSES, bias=False)
         self.softmax = nn.Softmax(dim=1)
 
     def forward(self, x):
         x = self.conv2d_1(x)
+        x = self.bn1(x)
         x = self.relu_1(x)
         x = self.conv2d_2(x)
+        x = self.bn2(x)
         x = self.relu_2(x)
         x = self.conv2d_3(x)
+        x = self.bn3(x)
         x = self.relu_3(x)
         x = self.flatten(x)
         x = self.linear(x)
@@ -188,14 +196,13 @@ def main():
     # Transformations
     transform = transforms.Compose([
         transforms.ToTensor(),
+        transforms.RandomRotation(25),
+        transforms.RandomCrop((round(IMG_HEIGHT * 0.75), round(IMG_WIDTH * 0.75))),
+        transforms.Resize((IMG_HEIGHT, IMG_WIDTH))
     ])
 
     # Create dataset
     dataset = CustomDataset(images, user_inputs, transform=transform)
-
-    # Initialize loss function and optimizer
-    criterion = nn.MSELoss()
-    optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
     # Split the dataset into training and validation sets
     train_size = int(TRAIN_VAL_RATIO * len(dataset))
@@ -203,6 +210,12 @@ def main():
     train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
     train_dataloader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=SHUFFLE, num_workers=NUM_WORKERS, pin_memory=PIN_MEMORY)
     val_dataloader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=SHUFFLE, num_workers=NUM_WORKERS, pin_memory=PIN_MEMORY)
+
+    # Initialize scaler, loss function and optimizer
+    scaler = GradScaler()
+    criterion = nn.MSELoss()
+    optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
+    scheduler = lr_scheduler.OneCycleLR(optimizer, max_lr=LEARNING_RATE, steps_per_epoch=len(train_dataloader), epochs=NUM_EPOCHS)
 
     # Early stopping variables
     best_validation_loss = float('inf')
@@ -279,13 +292,15 @@ def main():
         model.train()
         running_training_loss = 0.0
         for i, data in enumerate(train_dataloader, 0):
-            inputs, labels = data
-            inputs, labels = inputs.to(DEVICE), labels.to(DEVICE)
+            inputs, labels = data[0].to(DEVICE, non_blocking=True), data[1].to(DEVICE, non_blocking=True)
             optimizer.zero_grad()
-            outputs = model(inputs)
-            loss = criterion(outputs, labels)
-            loss.backward()
-            optimizer.step()
+            with autocast():
+                outputs = model(inputs)
+                loss = criterion(outputs, labels)
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
+            scheduler.step()
             running_training_loss += loss.item()
         running_training_loss /= len(train_dataloader)
         training_loss = running_training_loss
@@ -298,10 +313,9 @@ def main():
         # Validation phase
         model.eval()
         running_validation_loss = 0.0
-        with torch.no_grad():
+        with torch.no_grad(), autocast():
             for i, data in enumerate(val_dataloader, 0):
-                inputs, labels = data
-                inputs, labels = inputs.to(DEVICE), labels.to(DEVICE)
+                inputs, labels = data[0].to(DEVICE, non_blocking=True), data[1].to(DEVICE, non_blocking=True)
                 outputs = model(inputs)
                 loss = criterion(outputs, labels)
                 running_validation_loss += loss.item()
