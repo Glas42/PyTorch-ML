@@ -99,8 +99,6 @@ while True:
                 obj_class = np.argmax(output)
                 obj_confidence = confidence[0] + confidence[1] + confidence[2]
                 obj_confidence = obj_confidence / 3
-                if obj_confidence < 0.2:
-                    obj_confidence = 0
                 red = 1 if obj_class == 0 or obj_class == 1 else 0
                 green = 1 if obj_class == 1 or obj_class == 2 else 0
                 blue = 1 if obj_class == 3 else 0

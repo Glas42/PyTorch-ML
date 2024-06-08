@@ -25,16 +25,16 @@ DATA_PATH = PATH + "\\ModelFiles\\EditedTrainingData"
 MODEL_PATH = PATH + "\\ModelFiles\\Models"
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 NUM_EPOCHS = 1000
-BATCH_SIZE = 500
+BATCH_SIZE = 1
 CLASSES = 4
-IMG_WIDTH = 90
-IMG_HEIGHT = 150
+IMG_WIDTH = 90*3
+IMG_HEIGHT = 150*3
 IMG_BINARIZE = False
 IMG_GRAYSCALE = True
 LEARNING_RATE = 0.00001
 TRAIN_VAL_RATIO = 0.8
 NUM_WORKERS = 0
-DROPOUT = 0.5
+DROPOUT = 0.1
 PATIENCE = 100
 SHUFFLE = True
 PIN_MEMORY = True
@@ -133,14 +133,15 @@ class CustomDataset(Dataset):
 class ConvolutionalNeuralNetwork(nn.Module):
     def __init__(self):
         super(ConvolutionalNeuralNetwork, self).__init__()
-        self.conv2d_1 = nn.Conv2d(1 if IMG_GRAYSCALE or IMG_BINARIZE else 3, 128, (3, 3))
+        self.conv2d_1 = nn.Conv2d(1 if IMG_GRAYSCALE or IMG_BINARIZE else 3, 16, (3, 3))
         self.relu_1 = nn.ReLU()
-        self.conv2d_2 = nn.Conv2d(128, 256, (3, 3))
+        self.conv2d_2 = nn.Conv2d(16, 16, (3, 3))
         self.relu_2 = nn.ReLU()
-        self.conv2d_3 = nn.Conv2d(256, 256, (3, 3))
+        self.conv2d_3 = nn.Conv2d(16, 16, (3, 3))
         self.relu_3 = nn.ReLU()
         self.flatten = nn.Flatten()
-        self.linear = nn.Linear(256 * (80 - 6) * (160 - 6), CLASSES)
+        self.linear = nn.Linear(16 * (IMG_WIDTH - 6) * (IMG_HEIGHT - 6), CLASSES)
+        self.softmax = nn.Softmax(dim=1)
 
     def forward(self, x):
         x = self.conv2d_1(x)
@@ -151,6 +152,7 @@ class ConvolutionalNeuralNetwork(nn.Module):
         x = self.relu_3(x)
         x = self.flatten(x)
         x = self.linear(x)
+        x = self.softmax(x)
         return x
 
 def main():
