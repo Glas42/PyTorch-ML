@@ -9,7 +9,6 @@ from torch.utils.data import Dataset, DataLoader
 from torch.cuda.amp import GradScaler, autocast
 import torch.optim.lr_scheduler as lr_scheduler
 from torchvision import transforms
-import torch.nn.functional as F
 import torch.optim as optim
 import multiprocessing
 import torch.nn as nn
@@ -26,18 +25,18 @@ PATH = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)
 DATA_PATH = PATH + "\\ModelFiles\\EditedTrainingData"
 MODEL_PATH = PATH + "\\ModelFiles\\Models"
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-NUM_EPOCHS = 1000
-BATCH_SIZE = 100
+NUM_EPOCHS = 100
+BATCH_SIZE = 500
 CLASSES = 4
 IMG_WIDTH = 90
 IMG_HEIGHT = 150
 IMG_BINARIZE = False
 IMG_GRAYSCALE = True
-LEARNING_RATE = 0.00001
+LEARNING_RATE = 0.001
 TRAIN_VAL_RATIO = 0.8
 NUM_WORKERS = 0
 DROPOUT = 0.1
-PATIENCE = 100
+PATIENCE = 10
 SHUFFLE = True
 PIN_MEMORY = False
 
@@ -135,31 +134,51 @@ class CustomDataset(Dataset):
 class ConvolutionalNeuralNetwork(nn.Module):
     def __init__(self):
         super(ConvolutionalNeuralNetwork, self).__init__()
-        self.conv2d_1 = nn.Conv2d(1 if IMG_GRAYSCALE or IMG_BINARIZE else 3, 16, (3, 3), bias=False)
-        self.bn1 = nn.BatchNorm2d(16)
+        self.conv2d_1 = nn.Conv2d(COLOR_CHANNELS, 32, (3, 3), padding=1, bias=False)
+        self.bn1 = nn.BatchNorm2d(32)
         self.relu_1 = nn.ReLU()
-        self.conv2d_2 = nn.Conv2d(16, 16, (3, 3), bias=False)
-        self.bn2 = nn.BatchNorm2d(16)
+        self.maxpool_1 = nn.MaxPool2d((2, 2))
+
+        self.conv2d_2 = nn.Conv2d(32, 64, (3, 3), padding=1, bias=False)
+        self.bn2 = nn.BatchNorm2d(64)
         self.relu_2 = nn.ReLU()
-        self.conv2d_3 = nn.Conv2d(16, 16, (3, 3), bias=False)
-        self.bn3 = nn.BatchNorm2d(16)
+        self.maxpool_2 = nn.MaxPool2d((2, 2))
+
+        self.conv2d_3 = nn.Conv2d(64, 128, (3, 3), padding=1, bias=False)
+        self.bn3 = nn.BatchNorm2d(128)
         self.relu_3 = nn.ReLU()
+        self.maxpool_3 = nn.MaxPool2d((2, 2))
+
         self.flatten = nn.Flatten()
-        self.linear = nn.Linear(16 * (IMG_WIDTH - 6) * (IMG_HEIGHT - 6), CLASSES, bias=False)
+        self.dropout = nn.Dropout(DROPOUT)
+        self.linear_1 = nn.Linear(128 * (IMG_WIDTH // 8) * (IMG_HEIGHT // 8), 256, bias=False)
+        self.bn4 = nn.BatchNorm1d(256)
+        self.relu_4 = nn.ReLU()
+        self.linear_2 = nn.Linear(256, CLASSES, bias=False)
         self.softmax = nn.Softmax(dim=1)
 
     def forward(self, x):
         x = self.conv2d_1(x)
         x = self.bn1(x)
         x = self.relu_1(x)
+        x = self.maxpool_1(x)
+
         x = self.conv2d_2(x)
         x = self.bn2(x)
         x = self.relu_2(x)
+        x = self.maxpool_2(x)
+
         x = self.conv2d_3(x)
         x = self.bn3(x)
         x = self.relu_3(x)
+        x = self.maxpool_3(x)
+
         x = self.flatten(x)
-        x = self.linear(x)
+        x = self.dropout(x)
+        x = self.linear_1(x)
+        x = self.bn4(x)
+        x = self.relu_4(x)
+        x = self.linear_2(x)
         x = self.softmax(x)
         return x
 
@@ -190,6 +209,20 @@ def main():
 
     print(timestamp() + "Loading...")
 
+    # Create tensorboard logs folder if it doesn't exist
+    if not os.path.exists(f"{PATH}/AI/Classification/logs"): 
+        os.makedirs(f"{PATH}/AI/Classification/logs")
+
+    # Delete previous tensorboard logs
+    for obj in os.listdir(f"{PATH}/AI/Classification/logs"):
+        try:
+            shutil.rmtree(f"{PATH}/AI/Classification/logs/{obj}")
+        except:
+            os.remove(f"{PATH}/AI/Classification/logs/{obj}")
+
+    # Tensorboard setup
+    summary_writer = SummaryWriter(f"{PATH}/AI/Classification/logs", comment="Classification-Training", flush_secs=20)
+
     # Load data
     images, user_inputs = load_data()
 
@@ -213,7 +246,7 @@ def main():
 
     # Initialize scaler, loss function and optimizer
     scaler = GradScaler()
-    criterion = nn.MSELoss()
+    criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
     scheduler = lr_scheduler.OneCycleLR(optimizer, max_lr=LEARNING_RATE, steps_per_epoch=len(train_dataloader), epochs=NUM_EPOCHS)
 
@@ -224,20 +257,6 @@ def main():
     best_model_training_loss = None
     best_model_validation_loss = None
     wait = 0
-
-    # Create tensorboard logs folder if it doesn't exist
-    if not os.path.exists(f"{PATH}/AI/Classification/logs"): 
-        os.makedirs(f"{PATH}/AI/Classification/logs")
-
-    # Delete previous tensorboard logs
-    for obj in os.listdir(f"{PATH}/AI/Classification/logs"):
-        try:
-            shutil.rmtree(f"{PATH}/AI/Classification/logs/{obj}")
-        except:
-            os.remove(f"{PATH}/AI/Classification/logs/{obj}")
-
-    # Tensorboard setup
-    summary_writer = SummaryWriter(f"{PATH}/AI/Classification/logs", comment="Classification-Training", flush_secs=20)
 
     print(f"\r{timestamp()}Starting training...                       ")
     print("\n-----------------------------------------------------------------------------------------------------------\n")

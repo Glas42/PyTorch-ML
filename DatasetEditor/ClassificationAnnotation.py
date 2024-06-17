@@ -116,10 +116,22 @@ while True:
         mouse_x = 0
         mouse_y = 0
 
-
-    image_resized = cv2.resize(image, (frame_width//2, frame_height))
-    frame[0:image_resized.shape[0], 0:image_resized.shape[1]] = image_resized
-
+    try:
+        image_resized = cv2.resize(image, (frame_width//2, frame_height))
+        frame[0:image_resized.shape[0], 0:image_resized.shape[1]] = image_resized
+    except:
+        print("Error resizing image:", file)
+        if input("Delete this image? (y/n)").lower() == "y":
+            try:
+                os.remove(os.path.join(f"{PATH}TrainingData/{file}"))
+            except Exception as ex:
+                print(ex)
+            try:
+                os.remove(os.path.join(f"{PATH}TrainingData/{file.replace('.png', '.txt')}"))
+            except Exception as ex:
+                print(ex)
+            index += 1
+            continue
 
     button_class_0_pressed, button_class_0_hovered = make_button(text="Red (Class 0)",
                                                             x1=0.52*frame_width,
