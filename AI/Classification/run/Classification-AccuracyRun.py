@@ -30,10 +30,8 @@ for var in metadata:
         IMG_WIDTH = int(var.split("#")[1])
     if "image_height" in var:
         IMG_HEIGHT = int(var.split("#")[1])
-    if "image_grayscale" in var:
-        IMG_GRAYSCALE = True if var.split("#")[1] == "True" else False
-    if "image_binarize" in var:
-        IMG_BINARIZE = True if var.split("#")[1] == "True" else False
+    if "image_channels" in var:
+        IMG_CHANNELS = str(var.split("#")[1])
     if "training_dataset_accuracy" in var:
         print("Training dataset accuracy: " + str(var.split("#")[1]))
     if "validation_dataset_accuracy" in var:
@@ -79,12 +77,33 @@ for file in os.listdir(f"{os.path.dirname(PATH)}\\EditedTrainingData"):
 
         frame = cv2.imread(os.path.join(f"{os.path.dirname(PATH)}\\EditedTrainingData", file))
         frame = np.array(frame, dtype=np.float32)
-        frame = cv2.resize(frame, (IMG_WIDTH, IMG_HEIGHT))
-        if IMG_GRAYSCALE:
+        if IMG_CHANNELS == 'Grayscale' or IMG_CHANNELS == 'Binarize':
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        if IMG_BINARIZE:
-            frame = cv2.threshold(frame, 0.5, 1.0, cv2.THRESH_BINARY)[1]
+        else:
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+        if IMG_CHANNELS == 'RG':
+            frame = np.stack((frame[:, :, 0], frame[:, :, 1]), axis=2)
+        elif IMG_CHANNELS == 'GB':
+            frame = np.stack((frame[:, :, 1], frame[:, :, 2]), axis=2)
+        elif IMG_CHANNELS == 'RB':
+            frame = np.stack((frame[:, :, 0], frame[:, :, 2]), axis=2)
+        elif IMG_CHANNELS == 'R':
+            frame = frame[:, :, 0]
+            frame = np.expand_dims(frame, axis=2)
+        elif IMG_CHANNELS == 'G':
+            frame = frame[:, :, 1]
+            frame = np.expand_dims(frame, axis=2)
+        elif IMG_CHANNELS == 'B':
+            frame = frame[:, :, 2]
+            frame = np.expand_dims(frame, axis=2)
+
+        frame = cv2.resize(frame, (IMG_WIDTH, IMG_HEIGHT))
         frame = frame / 255.0
+
+        if IMG_CHANNELS == 'Binarize':
+            frame = cv2.threshold(frame, 0.5, 1.0, cv2.THRESH_BINARY)[1]
+
 
         frame = transform(frame).unsqueeze(0).to(device)
         with torch.no_grad():

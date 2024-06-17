@@ -30,8 +30,7 @@ BATCH_SIZE = 500
 CLASSES = 4
 IMG_WIDTH = 90
 IMG_HEIGHT = 150
-IMG_BINARIZE = False
-IMG_GRAYSCALE = True
+IMG_CHANNELS = ['Grayscale', 'Binarize', 'RGB', 'RG', 'GB', 'RB', 'R', 'G', 'B'][3]
 LEARNING_RATE = 0.001
 TRAIN_VAL_RATIO = 0.8
 NUM_WORKERS = 0
@@ -48,7 +47,10 @@ if IMG_COUNT == 0:
     print("No images found, exiting...")
     exit()
 
-COLOR_CHANNELS = 1 if IMG_GRAYSCALE or IMG_BINARIZE else 3
+if IMG_CHANNELS == 'Grayscale' or IMG_CHANNELS == 'Binarize':
+    COLOR_CHANNELS = 1
+else:
+    COLOR_CHANNELS = len(IMG_CHANNELS)
 
 RED = "\033[91m"
 GREEN = "\033[92m"
@@ -69,8 +71,7 @@ print(timestamp() + "> Classes:", CLASSES)
 print(timestamp() + "> Images:", IMG_COUNT)
 print(timestamp() + "> Image width:", IMG_WIDTH)
 print(timestamp() + "> Image height:", IMG_HEIGHT)
-print(timestamp() + "> Binarize image:", IMG_BINARIZE)
-print(timestamp() + "> Grayscale image:", IMG_GRAYSCALE)
+print(timestamp() + "> Image channels:", IMG_CHANNELS)
 print(timestamp() + "> Color channels:", COLOR_CHANNELS)
 print(timestamp() + "> Learning rate:", LEARNING_RATE)
 print(timestamp() + "> Dataset split:", TRAIN_VAL_RATIO)
@@ -87,14 +88,33 @@ def load_data():
     print(f"\r{timestamp()}Loading dataset...", end='', flush=True)
     for file in os.listdir(DATA_PATH):
         if file.endswith(".png"):
-            if IMG_GRAYSCALE or IMG_BINARIZE:
+            if IMG_CHANNELS== 'Grayscale' or IMG_CHANNELS == 'Binarize':
                 img = Image.open(os.path.join(DATA_PATH, file)).convert('L')  # Convert to grayscale
+                img = np.array(img)
             else:
                 img = Image.open(os.path.join(DATA_PATH, file))
-            img = np.array(img)
+                img = np.array(img)
+
+                if IMG_CHANNELS == 'RG':
+                    img = np.stack((img[:, :, 0], img[:, :, 1]), axis=2)
+                elif IMG_CHANNELS == 'GB':
+                    img = np.stack((img[:, :, 1], img[:, :, 2]), axis=2)
+                elif IMG_CHANNELS == 'RB':
+                    img = np.stack((img[:, :, 0], img[:, :, 2]), axis=2)
+                elif IMG_CHANNELS == 'R':
+                    img = img[:, :, 0]
+                    img = np.expand_dims(img, axis=2)
+                elif IMG_CHANNELS == 'G':
+                    img = img[:, :, 1]
+                    img = np.expand_dims(img, axis=2)
+                elif IMG_CHANNELS == 'B':
+                    img = img[:, :, 2]
+                    img = np.expand_dims(img, axis=2)
+
             img = cv2.resize(img, (IMG_WIDTH, IMG_HEIGHT))
-            img = img / 255.0  # Normalize the image
-            if IMG_BINARIZE:
+            img = img / 255.0
+
+            if IMG_CHANNELS == 'Binarize':
                 img = cv2.threshold(img, 0.5, 1.0, cv2.THRESH_BINARY)[1]
 
             user_inputs_file = os.path.join(DATA_PATH, file.replace(".png", ".txt"))
@@ -433,8 +453,7 @@ def main():
                 f"image_count#{IMG_COUNT}",
                 f"image_width#{IMG_WIDTH}",
                 f"image_height#{IMG_HEIGHT}",
-                f"image_binarize#{IMG_BINARIZE}",
-                f"image_grayscale#{IMG_GRAYSCALE}",
+                f"image_channels#{IMG_CHANNELS}",
                 f"color_channels#{COLOR_CHANNELS}",
                 f"learning_rate#{LEARNING_RATE}",
                 f"dataset_split#{TRAIN_VAL_RATIO}",
@@ -512,8 +531,7 @@ def main():
                 f"image_count#{IMG_COUNT}",
                 f"image_width#{IMG_WIDTH}",
                 f"image_height#{IMG_HEIGHT}",
-                f"image_binarize#{IMG_BINARIZE}",
-                f"image_grayscale#{IMG_GRAYSCALE}",
+                f"image_channels#{IMG_CHANNELS}",
                 f"color_channels#{COLOR_CHANNELS}",
                 f"learning_rate#{LEARNING_RATE}",
                 f"dataset_split#{TRAIN_VAL_RATIO}",
