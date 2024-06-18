@@ -15,6 +15,7 @@ import torch.nn as nn
 from PIL import Image
 import numpy as np
 import threading
+import random
 import shutil
 import torch
 import time
@@ -30,7 +31,7 @@ BATCH_SIZE = 500
 CLASSES = 4
 IMG_WIDTH = 90
 IMG_HEIGHT = 150
-IMG_CHANNELS = ['Grayscale', 'Binarize', 'RGB', 'RG', 'GB', 'RB', 'R', 'G', 'B'][3]
+IMG_CHANNELS = ['Grayscale', 'Binarize', 'RGB', 'RG', 'GB', 'RB', 'R', 'G', 'B'][0]
 LEARNING_RATE = 0.001
 TRAIN_VAL_RATIO = 0.8
 NUM_WORKERS = 0
@@ -249,8 +250,8 @@ def main():
     # Transformations
     transform = transforms.Compose([
         transforms.ToTensor(),
-        transforms.RandomRotation(25),
-        transforms.RandomCrop((round(IMG_HEIGHT * 0.75), round(IMG_WIDTH * 0.75))),
+        transforms.RandomRotation(35),
+        transforms.RandomCrop((round(IMG_HEIGHT * random.uniform(0.5, 1)), round(IMG_WIDTH * random.uniform(0.5, 1)))),
         transforms.Resize((IMG_HEIGHT, IMG_WIDTH))
     ])
 
