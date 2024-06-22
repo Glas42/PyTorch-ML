@@ -1,3 +1,3 @@
-# PyTorch-AI
+# PyTorch-ML
 
-This repository contains python codes to train and run PyTorch AI models.
+This repository contains python codes to train and run PyTorch models.
