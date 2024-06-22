@@ -33,34 +33,53 @@ if MODEL_PATH == "":
     print("No model found.")
     exit()
 
-IMG_WIDTH = 420
-IMG_HEIGHT = 220
-OUTPUTS = 3
-
-string = MODEL_PATH.split("\\")[-1]
-epochs = int(string.split("EPOCHS-")[1].split("_")[0])
-batch = int(string.split("BATCH-")[1].split("_")[0])
-img_width = int(string.split("IMG_WIDTH-")[1].split("_")[0])
-img_height = int(string.split("IMG_HEIGHT-")[1].split("_")[0])
-img_count = int(string.split("IMG_COUNT-")[1].split("_")[0])
-training_time = string.split("TIME-")[1].split("_")[0]
-training_date = string.split("DATE-")[1].split(".")[0]
-
 print(f"\nModel: {MODEL_PATH}")
-print(f"\n> Epochs: {epochs}")
-print(f"> Batch: {batch}")
-print(f"> Image Width: {img_width}")
-print(f"> Image Height: {img_height}")
-print(f"> Image Count: {img_count}")
-print(f"> Training Time: {training_time}")
-print(f"> Training Date: {training_date}\n")
 
-model = torch.jit.load(os.path.join(MODEL_PATH), map_location=device)
+metadata = {"data": []}
+model = torch.jit.load(os.path.join(MODEL_PATH), _extra_files=metadata, map_location=device)
 model.eval()
 
-transform = transforms.Compose([
-    transforms.ToTensor(),
-])
+metadata = str(metadata["data"]).replace('b"(', '').replace(')"', '').replace("'", "").split(", ") # now in the format: ["key#value", "key#value", ...]
+for var in metadata:
+    if "classes" in var:
+        CLASSES = int(var.split("#")[1])
+    if "image_width" in var:
+        IMG_WIDTH = int(var.split("#")[1])
+    if "image_height" in var:
+        IMG_HEIGHT = int(var.split("#")[1])
+    if "image_channels" in var:
+        IMG_CHANNELS = str(var.split("#")[1])
+    if "training_dataset_accuracy" in var:
+        print("Training dataset accuracy: " + str(var.split("#")[1]))
+    if "validation_dataset_accuracy" in var:
+        print("Validation dataset accuracy: " + str(var.split("#")[1]))
+    if "transform" in var:
+        transform = var.replace("\\n", "\n").replace('\\', '').split("#")[1]
+        transform_list = []
+        transform_parts = transform.strip().split("\n")
+        for part in transform_parts[1:-1]:
+            part = part.strip()
+            if part:
+                try:
+                    transform_args = []
+                    transform_name = part.split("(")[0]
+                    if "(" in part:
+                        args = part.split("(")[1][:-1].split(",")
+                        for arg in args:
+                            try:
+                                transform_args.append(int(arg.strip()))
+                            except ValueError:
+                                try:
+                                    transform_args.append(float(arg.strip()))
+                                except ValueError:
+                                    transform_args.append(arg.strip())
+                    if transform_name == "ToTensor":
+                        transform_list.append(transforms.ToTensor())
+                    else:
+                        transform_list.append(getattr(transforms, transform_name)(*transform_args))
+                except (AttributeError, IndexError, ValueError):
+                    print(f"Skipping or failed to create transform: {part}")
+        transform = transforms.Compose(transform_list)
 
 cv2.namedWindow('frame', cv2.WINDOW_NORMAL)
 cv2.setWindowProperty('frame', cv2.WND_PROP_TOPMOST, 1)

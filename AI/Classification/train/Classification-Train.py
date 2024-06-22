@@ -265,11 +265,11 @@ def main():
     train_dataloader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=SHUFFLE, num_workers=NUM_WORKERS, pin_memory=PIN_MEMORY)
     val_dataloader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=SHUFFLE, num_workers=NUM_WORKERS, pin_memory=PIN_MEMORY)
 
-    # Initialize scaler, loss function and optimizer
+    # Initialize scaler, loss function, optimizer and scheduler
     scaler = GradScaler()
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
-    scheduler = lr_scheduler.OneCycleLR(optimizer, max_lr=LEARNING_RATE, steps_per_epoch=len(train_dataloader), epochs=NUM_EPOCHS)
+    scheduler = lr_scheduler.OneCycleLR(optimizer, max_lr=LEARNING_RATE * 100, steps_per_epoch=len(train_dataloader), epochs=NUM_EPOCHS)
 
     # Early stopping variables
     best_validation_loss = float('inf')
@@ -419,6 +419,8 @@ def main():
     # Save the last model
     print(timestamp() + "Saving the last model...")
 
+    torch.cuda.empty_cache()
+
     model.eval()
     total_train = 0
     correct_train = 0
@@ -431,6 +433,8 @@ def main():
             total_train += labels.size(0)
             correct_train += (predicted == torch.argmax(labels, dim=1)).sum().item()
     training_dataset_accuracy = str(round(100 * (correct_train / total_train), 2)) + "%"
+
+    torch.cuda.empty_cache()
 
     total_val = 0
     correct_val = 0
@@ -497,6 +501,8 @@ def main():
     # Save the best model
     print(timestamp() + "Saving the best model...")
 
+    torch.cuda.empty_cache()
+
     best_model.eval()
     total_train = 0
     correct_train = 0
@@ -509,6 +515,8 @@ def main():
             total_train += labels.size(0)
             correct_train += (predicted == torch.argmax(labels, dim=1)).sum().item()
     training_dataset_accuracy = str(round(100 * (correct_train / total_train), 2)) + "%"
+
+    torch.cuda.empty_cache()
 
     total_val = 0
     correct_val = 0
