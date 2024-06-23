@@ -8,6 +8,6 @@
 /ModelFiles/*.pt
 
 # ignore the tensorboard logs
-/AI/Regression/logs
-/AI/ObjectDetection/logs
-/AI/Classification/logs
+/Training/Regression/logs
+/Training/ObjectDetection/logs
+/Training/Classification/logs
