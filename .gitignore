@@ -5,6 +5,7 @@
 /ModelFiles/Models/*
 /ModelFiles/TrainingData/*
 /ModelFiles/EditedTrainingData/*
+/ModelFiles/*.pt
 
 # ignore the tensorboard logs
 /AI/Regression/logs

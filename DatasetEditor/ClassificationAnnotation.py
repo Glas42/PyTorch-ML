@@ -55,11 +55,52 @@ def make_button(text="NONE", x1=0, y1=0, x2=100, y2=100, round_corners=30, butto
         return False, buttonhovered
 
 
-print("Creating image list... (May take a while, needs a lot of ram!)")
-for file in os.listdir(f"{PATH}TrainingData"):
-    if file.endswith(".png") and file not in os.listdir(f"{PATH}EditedTrainingData"):
-        images.append((cv2.imread(os.path.join(f"{PATH}TrainingData/{file}")), f"{file}"))
+auto_annotation = input(f"Its possible to auto annotate the images using an existing model.\nTo do this place the model in the following path: {PATH}\n\nUse auto annotation? (y/n)\n-> ").lower() == "y"
 
+if auto_annotation:
+    auto_annotation_model = None
+    for file in os.listdir(f"{PATH}"):
+        if file.endswith(".pt"):
+            print(f"\nFound a model: {file}\n")
+            auto_annotation_model = file
+    if auto_annotation_model == None:
+        print("\nNo model found, auto annotation will not be available.\n")
+    else:
+        print("Trying to load model...")
+        try:
+            import torch
+            metadata = {"data": []}
+            device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+            model = torch.jit.load(os.path.join(f"{PATH}{auto_annotation_model}"), _extra_files=metadata, map_location=device)
+            model.eval()
+        except Exception as ex:
+            print("\nError loading model, auto annotation will not be available.\n\nError message:\n" + str(ex) + "\n")
+        CLASSES = None
+        IMG_WIDTH = None
+        IMG_HEIGHT = None
+        IMG_CHANNELS = None
+        metadata = str(metadata["data"]).replace('b"(', '').replace(')"', '').replace("'", "").split(", ")
+        for var in metadata:
+            if "classes" in var:
+                CLASSES = int(var.split("#")[1])
+            if "image_width" in var:
+                IMG_WIDTH = int(var.split("#")[1])
+            if "image_height" in var:
+                IMG_HEIGHT = int(var.split("#")[1])
+            if "image_channels" in var:
+                IMG_CHANNELS = str(var.split("#")[1])
+        if CLASSES == None or IMG_WIDTH == None or IMG_HEIGHT == None or IMG_CHANNELS == None:
+            print("Model metadata not found, auto annotation will not be available.\n")
+        else:
+            print("Model loaded successfully.\n")
+
+print("\rCreating image list...", end="")
+for i, file in enumerate(os.listdir(f"{PATH}EditedTrainingData")):
+    if file.endswith(".png") and file not in os.listdir(f"{PATH}EditedTrainingData"):
+        images.append((cv2.imread(os.path.join(f"{PATH}EditedTrainingData", file)), f"{file}"))
+    if i % 100 == 0:
+        print(f"\rCreating image list... ({round(i/len(os.listdir(f'{PATH}EditedTrainingData'))*100)}%)", end="")
+print("\rCreated image list.           ", end="")
 
 background = np.zeros((frame_height, frame_width, 3), np.uint8)
 cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
@@ -123,11 +164,11 @@ while True:
         print("Error resizing image:", file)
         if input("Delete this image? (y/n)").lower() == "y":
             try:
-                os.remove(os.path.join(f"{PATH}TrainingData/{file}"))
+                os.remove(os.path.join(f"{PATH}EditedTrainingData/{file}"))
             except Exception as ex:
                 print(ex)
             try:
-                os.remove(os.path.join(f"{PATH}TrainingData/{file.replace('.png', '.txt')}"))
+                os.remove(os.path.join(f"{PATH}EditedTrainingData/{file.replace('.png', '.txt')}"))
             except Exception as ex:
                 print(ex)
             index += 1
@@ -213,26 +254,26 @@ while True:
 
 
     if button_class_0_pressed == True:
-        cv2.imwrite(os.path.join(f"{PATH}EditedTrainingData/{file}"), image)
         with open(os.path.join(f"{PATH}EditedTrainingData/{file.replace('.png', '.txt')}"), 'w') as f:
+            f.truncate(0)
             f.write("0")
             f.close()
         index += 1
     elif button_class_1_pressed == True:
-        cv2.imwrite(os.path.join(f"{PATH}EditedTrainingData/{file}"), image)
         with open(os.path.join(f"{PATH}EditedTrainingData/{file.replace('.png', '.txt')}"), 'w') as f:
+            f.truncate(0)
             f.write("1")
             f.close()
         index += 1
     elif button_class_2_pressed == True:
-        cv2.imwrite(os.path.join(f"{PATH}EditedTrainingData/{file}"), image)
         with open(os.path.join(f"{PATH}EditedTrainingData/{file.replace('.png', '.txt')}"), 'w') as f:
+            f.truncate(0)
             f.write("2")
             f.close()
         index += 1
     elif button_class_3_pressed == True:
-        cv2.imwrite(os.path.join(f"{PATH}EditedTrainingData/{file}"), image)
         with open(os.path.join(f"{PATH}EditedTrainingData/{file.replace('.png', '.txt')}"), 'w') as f:
+            f.truncate(0)
             f.write("3")
             f.close()
         index += 1
