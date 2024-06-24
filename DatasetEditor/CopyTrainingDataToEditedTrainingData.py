@@ -1,4 +1,3 @@
-import threading
 import shutil
 import cv2
 import os

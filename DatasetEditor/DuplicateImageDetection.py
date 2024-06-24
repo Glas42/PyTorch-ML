@@ -7,6 +7,7 @@ PATH = os.path.dirname(os.path.dirname(__file__)) + "\\ModelFiles\\"
 GRAYSCALE = True
 IMG_WIDTH = 90
 IMG_HEIGHT = 150
+MAX_PIXEL_DIFF = 10
 MIN_SIMILARITY = 0.9
 MIN_SHAPE_SIMILARITY = 0.95
 
@@ -36,7 +37,8 @@ for i, (image1, shape1, file1) in enumerate(images):
     for j, (image2, shape2, file2) in enumerate(images):
         if file1 != file2:
             if abs(shape1[0] - shape2[0]) <= (shape1[0] + shape2[0]) / 2 * (1 - MIN_SHAPE_SIMILARITY) and abs(shape1[1] - shape2[1]) <= (shape1[1] + shape2[1]) / 2 * (1 - MIN_SHAPE_SIMILARITY):
-                if cv2.countNonZero(cv2.absdiff(image1, image2)) / (image1.shape[0] * image1.shape[1]) <= 1 - MIN_SIMILARITY:
+                diff = cv2.absdiff(image1, image2)
+                if cv2.countNonZero(diff[diff > MAX_PIXEL_DIFF]) / (image1.shape[0] * image1.shape[1]) <= 1 - MIN_SIMILARITY:
                     duplicate_images.append((file2))
     if i % 100 == 0:
         eta = time.strftime('%H:%M:%S', time.gmtime(round((time.time() - start) / (i + 1) * total_files - (time.time() - start) + (time.time() - time.time()), 2)))
