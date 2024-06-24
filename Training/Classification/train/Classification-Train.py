@@ -33,6 +33,7 @@ IMG_WIDTH = 90
 IMG_HEIGHT = 150
 IMG_CHANNELS = ['Grayscale', 'Binarize', 'RGB', 'RG', 'GB', 'RB', 'R', 'G', 'B'][0]
 LEARNING_RATE = 0.001
+MAX_LEARNING_RATE = 0.001
 TRAIN_VAL_RATIO = 0.8
 NUM_WORKERS = 0
 DROPOUT = 0.1
@@ -75,6 +76,7 @@ print(timestamp() + "> Image height:", IMG_HEIGHT)
 print(timestamp() + "> Image channels:", IMG_CHANNELS)
 print(timestamp() + "> Color channels:", COLOR_CHANNELS)
 print(timestamp() + "> Learning rate:", LEARNING_RATE)
+print(timestamp() + "> Max learning rate:", MAX_LEARNING_RATE)
 print(timestamp() + "> Dataset split:", TRAIN_VAL_RATIO)
 print(timestamp() + "> Number of workers:", NUM_WORKERS)
 print(timestamp() + "> Dropout:", DROPOUT)
@@ -269,7 +271,7 @@ def main():
     scaler = GradScaler()
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
-    scheduler = lr_scheduler.OneCycleLR(optimizer, max_lr=LEARNING_RATE * 100, steps_per_epoch=len(train_dataloader), epochs=NUM_EPOCHS)
+    scheduler = lr_scheduler.OneCycleLR(optimizer, max_lr=MAX_LEARNING_RATE, steps_per_epoch=len(train_dataloader), epochs=NUM_EPOCHS)
 
     # Early stopping variables
     best_validation_loss = float('inf')
@@ -461,6 +463,7 @@ def main():
                 f"image_channels#{IMG_CHANNELS}",
                 f"color_channels#{COLOR_CHANNELS}",
                 f"learning_rate#{LEARNING_RATE}",
+                f"max_learning_rate#{MAX_LEARNING_RATE}",
                 f"dataset_split#{TRAIN_VAL_RATIO}",
                 f"number_of_workers#{NUM_WORKERS}",
                 f"dropout#{DROPOUT}",
@@ -543,6 +546,7 @@ def main():
                 f"image_channels#{IMG_CHANNELS}",
                 f"color_channels#{COLOR_CHANNELS}",
                 f"learning_rate#{LEARNING_RATE}",
+                f"max_learning_rate#{MAX_LEARNING_RATE}",
                 f"dataset_split#{TRAIN_VAL_RATIO}",
                 f"number_of_workers#{NUM_WORKERS}",
                 f"dropout#{DROPOUT}",
