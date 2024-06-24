@@ -1,5 +1,4 @@
 import numpy as np
-import shutil
 import ctypes
 import mouse
 import cv2
@@ -69,6 +68,7 @@ if auto_annotation:
         print("Trying to load model...")
         try:
             import torch
+            from torchvision import transforms
             metadata = {"data": []}
             device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
             model = torch.jit.load(os.path.join(f"{PATH}{auto_annotation_model}"), _extra_files=metadata, map_location=device)
@@ -89,6 +89,33 @@ if auto_annotation:
                 IMG_HEIGHT = int(var.split("#")[1])
             if "image_channels" in var:
                 IMG_CHANNELS = str(var.split("#")[1])
+            if "transform" in var:
+                transform = var.replace("\\n", "\n").replace('\\', '').split("#")[1]
+                transform_list = []
+                transform_parts = transform.strip().split("\n")
+                for part in transform_parts[1:-1]:
+                    part = part.strip()
+                    if part:
+                        try:
+                            transform_args = []
+                            transform_name = part.split("(")[0]
+                            if "(" in part:
+                                args = part.split("(")[1][:-1].split(",")
+                                for arg in args:
+                                    try:
+                                        transform_args.append(int(arg.strip()))
+                                    except ValueError:
+                                        try:
+                                            transform_args.append(float(arg.strip()))
+                                        except ValueError:
+                                            transform_args.append(arg.strip())
+                            if transform_name == "ToTensor":
+                                transform_list.append(transforms.ToTensor())
+                            else:
+                                transform_list.append(getattr(transforms, transform_name)(*transform_args))
+                        except (AttributeError, IndexError, ValueError):
+                            print(f"Skipping or failed to create transform: {part}")
+                transform = transforms.Compose(transform_list)
         if CLASSES == None or IMG_WIDTH == None or IMG_HEIGHT == None or IMG_CHANNELS == None:
             print("Model metadata not found, auto annotation will not be available.\n")
         else:
@@ -96,7 +123,7 @@ if auto_annotation:
 
 print("\rCreating image list...", end="")
 for i, file in enumerate(os.listdir(f"{PATH}EditedTrainingData")):
-    if file.endswith(".png") and file not in os.listdir(f"{PATH}EditedTrainingData"):
+    if file.endswith(".png"):
         images.append((cv2.imread(os.path.join(f"{PATH}EditedTrainingData", file)), f"{file}"))
     if i % 100 == 0:
         print(f"\rCreating image list... ({round(i/len(os.listdir(f'{PATH}EditedTrainingData'))*100)}%)", end="")
@@ -174,15 +201,79 @@ while True:
             index += 1
             continue
 
+
+    predicted_class = None
+    if auto_annotation:
+        image = np.array(image, dtype=np.float32)
+        if IMG_CHANNELS == 'Grayscale' or IMG_CHANNELS == 'Binarize':
+            image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        else:
+            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
+        if IMG_CHANNELS == 'RG':
+            image = np.stack((image[:, :, 0], image[:, :, 1]), axis=2)
+        elif IMG_CHANNELS == 'GB':
+            image = np.stack((image[:, :, 1], image[:, :, 2]), axis=2)
+        elif IMG_CHANNELS == 'RB':
+            image = np.stack((image[:, :, 0], image[:, :, 2]), axis=2)
+        elif IMG_CHANNELS == 'R':
+            image = image[:, :, 0]
+            image = np.expand_dims(image, axis=2)
+        elif IMG_CHANNELS == 'G':
+            image = image[:, :, 1]
+            image = np.expand_dims(image, axis=2)
+        elif IMG_CHANNELS == 'B':
+            image = image[:, :, 2]
+            image = np.expand_dims(image, axis=2)
+
+        image = cv2.resize(image, (IMG_WIDTH, IMG_HEIGHT))
+        image = image / 255.0
+
+        if IMG_CHANNELS == 'Binarize':
+            image = cv2.threshold(image, 0.5, 1.0, cv2.THRESH_BINARY)[1]
+
+
+        image = transform(image).unsqueeze(0).to(device)
+        with torch.no_grad():
+            output = np.array(model(image)[0].tolist())
+
+        output = output * (1 / sum(output))
+        confidence = [x / sum(output) for x in output]
+        obj_class = np.argmax(output)
+        obj_confidence = confidence[obj_class]
+        if obj_confidence > 0.8:
+            predicted_class = obj_class
+
+
+    if predicted_class == None:
+        class_0_color = (0, 0, 200)
+        class_1_color = (0, 200, 200)
+        class_2_color = (0, 200, 0)
+        class_3_color = (200, 0, 0)
+    else:
+        class_0_color = (50, 50, 50)
+        class_1_color = (50, 50, 50)
+        class_2_color = (50, 50, 50)
+        class_3_color = (50, 50, 50)
+        if predicted_class == 0:
+            class_0_color = (0, 0, 200)
+        elif predicted_class == 1:
+            class_1_color = (0, 200, 200)
+        elif predicted_class == 2:
+            class_2_color = (0, 200, 0)
+        elif predicted_class == 3:
+            class_3_color = (200, 0, 0)
+
+
     button_class_0_pressed, button_class_0_hovered = make_button(text="Red (Class 0)",
                                                             x1=0.52*frame_width,
                                                             y1=0.25*frame_height,
                                                             x2=0.98*frame_width,
                                                             y2=0.4*frame_height,
                                                             round_corners=30,
-                                                            buttoncolor=(0, 0, 200),
-                                                            buttonhovercolor=(20, 20, 220),
-                                                            buttonselectedcolor=(20, 20, 220),
+                                                            buttoncolor=class_0_color,
+                                                            buttonhovercolor=(class_0_color[0]+20, class_0_color[1]+20, class_0_color[2]+20),
+                                                            buttonselectedcolor=(class_0_color[0]+20, class_0_color[1]+20, class_0_color[2]+20),
                                                             textcolor=(255, 255, 255),
                                                             width_scale=0.95,
                                                             height_scale=0.5)
@@ -193,9 +284,9 @@ while True:
                                                             x2=0.98*frame_width,
                                                             y2=0.575*frame_height,
                                                             round_corners=30,
-                                                            buttoncolor=(0, 200, 200),
-                                                            buttonhovercolor=(20, 220, 220),
-                                                            buttonselectedcolor=(20, 220, 220),
+                                                            buttoncolor=class_1_color,
+                                                            buttonhovercolor=(class_1_color[0]+20, class_1_color[1]+20, class_1_color[2]+20),
+                                                            buttonselectedcolor=(class_1_color[0]+20, class_1_color[1]+20, class_1_color[2]+20),
                                                             textcolor=(255, 255, 255),
                                                             width_scale=0.95,
                                                             height_scale=0.5)
@@ -206,9 +297,9 @@ while True:
                                                             x2=0.98*frame_width,
                                                             y2=0.75*frame_height,
                                                             round_corners=30,
-                                                            buttoncolor=(0, 200, 0),
-                                                            buttonhovercolor=(20, 220, 20),
-                                                            buttonselectedcolor=(20, 220, 20),
+                                                            buttoncolor=class_2_color,
+                                                            buttonhovercolor=(class_2_color[0]+20, class_2_color[1]+20, class_2_color[2]+20),
+                                                            buttonselectedcolor=(class_2_color[0]+20, class_2_color[1]+20, class_2_color[2]+20),
                                                             textcolor=(255, 255, 255),
                                                             width_scale=0.95,
                                                             height_scale=0.5)
@@ -219,9 +310,9 @@ while True:
                                                             x2=0.98*frame_width,
                                                             y2=0.98*frame_height,
                                                             round_corners=30,
-                                                            buttoncolor=(200, 0, 0),
-                                                            buttonhovercolor=(220, 20, 20),
-                                                            buttonselectedcolor=(220, 20, 20),
+                                                            buttoncolor=class_3_color,
+                                                            buttonhovercolor=(class_3_color[0]+20, class_3_color[1]+20, class_3_color[2]+20),
+                                                            buttonselectedcolor=(class_3_color[0]+20, class_3_color[1]+20, class_3_color[2]+20),
                                                             textcolor=(255, 255, 255),
                                                             width_scale=0.95,
                                                             height_scale=0.5)
@@ -251,6 +342,16 @@ while True:
                                                             textcolor=(255, 255, 255),
                                                             width_scale=0.95,
                                                             height_scale=0.5)
+
+
+    if predicted_class == 0:
+        button_class_0_pressed = True
+    elif predicted_class == 1:
+        button_class_1_pressed = True
+    elif predicted_class == 2:
+        button_class_2_pressed = True
+    elif predicted_class == 3:
+        button_class_3_pressed = True
 
 
     if button_class_0_pressed == True:

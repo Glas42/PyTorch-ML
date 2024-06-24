@@ -187,18 +187,18 @@ def main():
     wait = 0
 
     # Create tensorboard logs folder if it doesn't exist
-    if not os.path.exists(f"{PATH}/AI/ObjectDetection/logs"): 
-        os.makedirs(f"{PATH}/AI/ObjectDetection/logs")
+    if not os.path.exists(f"{PATH}/Training/ObjectDetection/logs"):
+        os.makedirs(f"{PATH}/Training/ObjectDetection/logs")
 
     # Delete previous tensorboard logs
-    for obj in os.listdir(f"{PATH}/AI/ObjectDetection/logs"):
+    for obj in os.listdir(f"{PATH}/Training/ObjectDetection/logs"):
         try:
-            shutil.rmtree(f"{PATH}/AI/ObjectDetection/logs/{obj}")
+            shutil.rmtree(f"{PATH}/Training/ObjectDetection/logs/{obj}")
         except:
-            os.remove(f"{PATH}/AI/ObjectDetection/logs/{obj}")
+            os.remove(f"{PATH}/Training/ObjectDetection/logs/{obj}")
 
     # Tensorboard setup
-    summary_writer = SummaryWriter(f"{PATH}/AI/ObjectDetection/logs", comment="ObjectDetection-Training", flush_secs=20)
+    summary_writer = SummaryWriter(f"{PATH}/Training/ObjectDetection/logs", comment="ObjectDetection-Training", flush_secs=20)
 
     print(f"\r{timestamp()}Starting training...                       ")
     print("\n-----------------------------------------------------------------------------------------------------------\n")

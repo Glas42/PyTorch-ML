@@ -27,7 +27,7 @@ DATA_PATH = PATH + "\\ModelFiles\\EditedTrainingData"
 MODEL_PATH = PATH + "\\ModelFiles\\Models"
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 NUM_EPOCHS = 100
-BATCH_SIZE = 500
+BATCH_SIZE = 300
 CLASSES = 4
 IMG_WIDTH = 90
 IMG_HEIGHT = 150
@@ -231,18 +231,18 @@ def main():
     print(timestamp() + "Loading...")
 
     # Create tensorboard logs folder if it doesn't exist
-    if not os.path.exists(f"{PATH}/AI/Classification/logs"): 
-        os.makedirs(f"{PATH}/AI/Classification/logs")
+    if not os.path.exists(f"{PATH}/Training/Classification/logs"):
+        os.makedirs(f"{PATH}/Training/Classification/logs")
 
     # Delete previous tensorboard logs
-    for obj in os.listdir(f"{PATH}/AI/Classification/logs"):
+    for obj in os.listdir(f"{PATH}/Training/Classification/logs"):
         try:
-            shutil.rmtree(f"{PATH}/AI/Classification/logs/{obj}")
+            shutil.rmtree(f"{PATH}/Training/Classification/logs/{obj}")
         except:
-            os.remove(f"{PATH}/AI/Classification/logs/{obj}")
+            os.remove(f"{PATH}/Training/Classification/logs/{obj}")
 
     # Tensorboard setup
-    summary_writer = SummaryWriter(f"{PATH}/AI/Classification/logs", comment="Classification-Training", flush_secs=20)
+    summary_writer = SummaryWriter(f"{PATH}/Training/Classification/logs", comment="Classification-Training", flush_secs=20)
 
     # Load data
     images, user_inputs = load_data()

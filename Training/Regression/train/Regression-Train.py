@@ -206,18 +206,18 @@ def main():
     print(timestamp() + "Loading...")
 
     # Create tensorboard logs folder if it doesn't exist
-    if not os.path.exists(f"{PATH}/AI/Regression/logs"): 
-        os.makedirs(f"{PATH}/AI/Regression/logs")
+    if not os.path.exists(f"{PATH}/Training/Regression/logs"):
+        os.makedirs(f"{PATH}/Training/Regression/logs")
 
     # Delete previous tensorboard logs
-    for obj in os.listdir(f"{PATH}/AI/Regression/logs"):
+    for obj in os.listdir(f"{PATH}/Training/Regression/logs"):
         try:
-            shutil.rmtree(f"{PATH}/AI/Regression/logs/{obj}")
+            shutil.rmtree(f"{PATH}/Training/Regression/logs/{obj}")
         except:
-            os.remove(f"{PATH}/AI/Regression/logs/{obj}")
+            os.remove(f"{PATH}/Training/Regression/logs/{obj}")
 
     # Tensorboard setup
-    summary_writer = SummaryWriter(f"{PATH}/AI/Regression/logs", comment="Regression-Training", flush_secs=20)
+    summary_writer = SummaryWriter(f"{PATH}/Training/Regression/logs", comment="Regression-Training", flush_secs=20)
 
     # Load data
     images, user_inputs = load_data()
