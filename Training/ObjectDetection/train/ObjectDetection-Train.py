@@ -28,9 +28,10 @@ MODEL_PATH = PATH + "\\ModelFiles\\Models"
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 NUM_EPOCHS = 100
 BATCH_SIZE = 100
-CLASSES = 4
-IMG_WIDTH = 256
-IMG_HEIGHT = 256
+NUM_CLASSES = 10
+NUM_BBOX = 4
+IMG_WIDTH = 252
+IMG_HEIGHT = 252
 IMG_CHANNELS = ['Grayscale', 'Binarize', 'RGB', 'RG', 'GB', 'RB', 'R', 'G', 'B'][0]
 LEARNING_RATE = 0.001
 MAX_LEARNING_RATE = 0.001
@@ -69,7 +70,8 @@ print()
 print(timestamp() + "Training settings:")
 print(timestamp() + "> Epochs:", NUM_EPOCHS)
 print(timestamp() + "> Batch size:", BATCH_SIZE)
-print(timestamp() + "> Classes:", CLASSES)
+print(timestamp() + "> Classes:", NUM_CLASSES)
+print(timestamp() + "> Bounding boxes:", NUM_BBOX)
 print(timestamp() + "> Images:", IMG_COUNT)
 print(timestamp() + "> Image width:", IMG_WIDTH)
 print(timestamp() + "> Image height:", IMG_HEIGHT)
@@ -120,15 +122,14 @@ def load_data():
             if IMG_CHANNELS == 'Binarize':
                 img = cv2.threshold(img, 0.5, 1.0, cv2.THRESH_BINARY)[1]
 
-            user_inputs_file = os.path.join(DATA_PATH, file.replace(".png", ".txt"))
-            if os.path.exists(user_inputs_file):
-                with open(user_inputs_file, 'r') as f:
-                    content = str(f.read())
-                    if content.isdigit() and 0 <= int(content) < CLASSES:
-                        user_input = [0] * CLASSES
-                        user_input[int(content)] = 1
-                images.append(img)
-                user_inputs.append(user_input)
+            bbox_file = os.path.join(DATA_PATH, file.replace(".png", ".txt"))
+            if os.path.exists(bbox_file):
+                with open(bbox_file, 'r') as f:
+                    content = f.read().strip().split('\n')
+                    for line in content:
+                        class_id, center_x, center_y, width, height = [float(x) for x in line.split(',')]
+                        bbox = np.array([class_id, center_x, center_y, width, height])
+                        user_inputs.append(bbox)
             else:
                 pass
 
@@ -154,18 +155,42 @@ class CustomDataset(Dataset):
         return image, torch.as_tensor(user_input, dtype=torch.float32)
 
 # Define the model
-class ConvolutionalNeuralNetwork(nn.Module):
+class ObjectDetectionModel(nn.Module):
     def __init__(self):
-        super(ConvolutionalNeuralNetwork, self).__init__()
-
+        super(ObjectDetectionModel, self).__init__()
+        self.features = nn.Sequential(
+            nn.Conv2d(COLOR_CHANNELS, 32, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2, stride=2),
+            nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2, stride=2),
+            nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2, stride=2),
+            nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2, stride=2),
+        )
+        self.classifier = nn.Sequential(
+            nn.Dropout(DROPOUT),
+            nn.Linear(256 * (IMG_HEIGHT // 16) * (IMG_WIDTH // 16), 512),
+            nn.ReLU(inplace=True),
+            nn.Dropout(DROPOUT),
+            nn.Linear(512, NUM_CLASSES + NUM_BBOX),
+        )
 
     def forward(self, x):
-
-        return x
+        x = self.features(x)
+        x = x.view(x.size(0), -1)
+        output = self.classifier(x)
+        class_scores = output[:, :NUM_CLASSES]
+        bbox_outputs = output[:, NUM_CLASSES:]
+        return class_scores, bbox_outputs
 
 def main():
     # Initialize model
-    model = ConvolutionalNeuralNetwork().to(DEVICE)
+    model = ObjectDetectionModel().to(DEVICE)
 
     def get_model_size_mb(model):
         total_params = 0
@@ -227,7 +252,8 @@ def main():
 
     # Initialize scaler, loss function, optimizer and scheduler
     scaler = GradScaler()
-    criterion = nn.MSELoss()
+    class_criterion = nn.CrossEntropyLoss()
+    bbox_criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
     scheduler = lr_scheduler.OneCycleLR(optimizer, max_lr=MAX_LEARNING_RATE, steps_per_epoch=len(train_dataloader), epochs=NUM_EPOCHS)
 
@@ -291,16 +317,18 @@ def main():
         # Training phase
         model.train()
         running_training_loss = 0.0
-        for i, data in enumerate(train_dataloader, 0):
-            inputs, labels = data[0].to(DEVICE, non_blocking=True), data[1].to(DEVICE, non_blocking=True)
+        for data in train_dataloader:
+            images, labels = data
+            images, labels = images.to(DEVICE), labels.to(DEVICE)
             optimizer.zero_grad()
             with autocast():
-                outputs = model(inputs)
-                loss = criterion(outputs, labels)
+                class_scores, bbox_outputs = model(images)
+                class_loss = class_criterion(class_scores, labels[:, 0].long())
+                bbox_loss = bbox_criterion(bbox_outputs, labels[:, 1:])
+                loss = class_loss + bbox_loss
             scaler.scale(loss).backward()
             scaler.step(optimizer)
             scaler.update()
-            scheduler.step()
             running_training_loss += loss.item()
         running_training_loss /= len(train_dataloader)
         training_loss = running_training_loss
@@ -313,12 +341,15 @@ def main():
         # Validation phase
         model.eval()
         running_validation_loss = 0.0
-        with torch.no_grad(), autocast():
-            for i, data in enumerate(val_dataloader, 0):
-                inputs, labels = data[0].to(DEVICE, non_blocking=True), data[1].to(DEVICE, non_blocking=True)
-                outputs = model(inputs)
-                loss = criterion(outputs, labels)
-                running_validation_loss += loss.item()
+        for data in val_dataloader:
+            images, labels = data
+            images, labels = images.to(DEVICE), labels.to(DEVICE)
+            with torch.no_grad():
+                class_scores, bbox_outputs = model(images)
+                class_loss = class_criterion(class_scores, labels[:, 0].long())
+                bbox_loss = bbox_criterion(bbox_outputs, labels[:, 1:])
+                loss = class_loss + bbox_loss
+            running_validation_loss += loss.item()
         running_validation_loss /= len(val_dataloader)
         validation_loss = running_validation_loss
 
@@ -379,42 +410,14 @@ def main():
     # Save the last model
     print(timestamp() + "Saving the last model...")
 
-    torch.cuda.empty_cache()
-
-    model.eval()
-    total_train = 0
-    correct_train = 0
-    with torch.no_grad():
-        for data in train_dataloader:
-            images, labels = data
-            images, labels = images.to(DEVICE), labels.to(DEVICE)
-            outputs = model(images)
-            _, predicted = torch.max(outputs.data, 1)
-            total_train += labels.size(0)
-            correct_train += (predicted == torch.argmax(labels, dim=1)).sum().item()
-    training_dataset_accuracy = str(round(100 * (correct_train / total_train), 2)) + "%"
-
-    torch.cuda.empty_cache()
-
-    total_val = 0
-    correct_val = 0
-    with torch.no_grad():
-        for data in val_dataloader:
-            images, labels = data
-            images, labels = images.to(DEVICE), labels.to(DEVICE)
-            outputs = model(images)
-            _, predicted = torch.max(outputs.data, 1)
-            total_val += labels.size(0)
-            correct_val += (predicted == torch.argmax(labels, dim=1)).sum().item()
-    validation_dataset_accuracy = str(round(100 * (correct_val / total_val), 2)) + "%"
-
     metadata_optimizer = str(optimizer).replace('\n', '')
-    metadata_criterion = str(criterion).replace('\n', '')
+    metadata_criterion = str(class_criterion).replace('\n', '') + ', ' + str(bbox_criterion).replace('\n', '')
     metadata_model = str(model).replace('\n', '')
     metadata = (f"epochs#{epoch+1}",
                 f"batch#{BATCH_SIZE}",
-                f"classes#{CLASSES}",
-                f"outputs#{CLASSES}",
+                f"classes#{NUM_CLASSES}",
+                f"bboxes#{NUM_BBOX}",
+                f"outputs#{NUM_CLASSES+NUM_BBOX}",
                 f"image_count#{IMG_COUNT}",
                 f"image_width#{IMG_WIDTH}",
                 f"image_height#{IMG_HEIGHT}",
@@ -442,9 +445,7 @@ def main():
                 f"training_size#{train_size}",
                 f"validation_size#{val_size}",
                 f"training_loss#{best_model_training_loss}",
-                f"validation_loss#{best_model_validation_loss}",
-                f"training_dataset_accuracy#{training_dataset_accuracy}",
-                f"validation_dataset_accuracy#{validation_dataset_accuracy}")
+                f"validation_loss#{best_model_validation_loss}")
     metadata = {"data": metadata}
     metadata = {data: str(value).encode("ascii") for data, value in metadata.items()}
 
@@ -462,42 +463,14 @@ def main():
     # Save the best model
     print(timestamp() + "Saving the best model...")
 
-    torch.cuda.empty_cache()
-
-    best_model.eval()
-    total_train = 0
-    correct_train = 0
-    with torch.no_grad():
-        for data in train_dataloader:
-            images, labels = data
-            images, labels = images.to(DEVICE), labels.to(DEVICE)
-            outputs = best_model(images)
-            _, predicted = torch.max(outputs.data, 1)
-            total_train += labels.size(0)
-            correct_train += (predicted == torch.argmax(labels, dim=1)).sum().item()
-    training_dataset_accuracy = str(round(100 * (correct_train / total_train), 2)) + "%"
-
-    torch.cuda.empty_cache()
-
-    total_val = 0
-    correct_val = 0
-    with torch.no_grad():
-        for data in val_dataloader:
-            images, labels = data
-            images, labels = images.to(DEVICE), labels.to(DEVICE)
-            outputs = best_model(images)
-            _, predicted = torch.max(outputs.data, 1)
-            total_val += labels.size(0)
-            correct_val += (predicted == torch.argmax(labels, dim=1)).sum().item()
-    validation_dataset_accuracy = str(round(100 * (correct_val / total_val), 2)) + "%"
-
     metadata_optimizer = str(optimizer).replace('\n', '')
-    metadata_criterion = str(criterion).replace('\n', '')
+    metadata_criterion = str(class_criterion).replace('\n', '') + ', ' + str(bbox_criterion).replace('\n', '')
     metadata_model = str(best_model).replace('\n', '')
     metadata = (f"epochs#{best_model_epoch+1}",
                 f"batch#{BATCH_SIZE}",
-                f"classes#{CLASSES}",
-                f"outputs#{CLASSES}",
+                f"classes#{NUM_CLASSES}",
+                f"bboxes#{NUM_BBOX}",
+                f"outputs#{NUM_CLASSES+NUM_BBOX}",
                 f"image_count#{IMG_COUNT}",
                 f"image_width#{IMG_WIDTH}",
                 f"image_height#{IMG_HEIGHT}",
@@ -525,9 +498,7 @@ def main():
                 f"training_size#{train_size}",
                 f"validation_size#{val_size}",
                 f"training_loss#{training_loss}",
-                f"validation_loss#{validation_loss}",
-                f"training_dataset_accuracy#{training_dataset_accuracy}",
-                f"validation_dataset_accuracy#{validation_dataset_accuracy}")
+                f"validation_loss#{validation_loss}")
     metadata = {"data": metadata}
     metadata = {data: str(value).encode("ascii") for data, value in metadata.items()}
 
