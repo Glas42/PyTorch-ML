@@ -28,7 +28,7 @@ for _ in range(number_of_images_to_generate):
             digit = images_train[index]
             label = labels_train[index]
             if np.sum(frame[y:(y+28), x:(x+28)]) == 0:
-                min_x, max_x, min_y, max_y = 28, 0, 28, 0
+                min_x, min_y, max_x, max_y = float("inf"), float("inf"), 0, 0
                 for row in range(28):
                     for col in range(28):
                         if digit[row][col] != 0:
@@ -40,7 +40,15 @@ for _ in range(number_of_images_to_generate):
                                 min_y = row
                             if row > max_y:
                                 max_y = row
-                annotation.append(f"{label},{x + round((min_x + max_x) / 2)},{y + round((min_y + max_y) / 2)},{max_x - min_x},{max_y - min_y}")
+                min_x += x
+                min_y += y
+                max_x += x
+                max_y += y
+                min_x /= frame.shape[1]
+                min_y /= frame.shape[0]
+                max_x /= frame.shape[1]
+                max_y /= frame.shape[0]
+                annotation.append(f"{min_x},{min_y},{max_x},{max_y}")
                 frame[y:(y+28), x:(x+28)] = digit
                 digit_placed = True
 

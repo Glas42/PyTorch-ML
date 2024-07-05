@@ -63,6 +63,7 @@ if auto_annotation:
             print(f"\nFound a model: {file}\n")
             auto_annotation_model = file
     if auto_annotation_model == None:
+        auto_annotation = False
         print("\nNo model found, auto annotation will not be available.\n")
     else:
         print("Trying to load model...")
@@ -74,6 +75,7 @@ if auto_annotation:
             model = torch.jit.load(os.path.join(f"{PATH}{auto_annotation_model}"), _extra_files=metadata, map_location=device)
             model.eval()
         except Exception as ex:
+            auto_annotation = False
             print("\nError loading model, auto annotation will not be available.\n\nError message:\n" + str(ex) + "\n")
         CLASSES = None
         IMG_WIDTH = None
@@ -117,6 +119,7 @@ if auto_annotation:
                             print(f"Skipping or failed to create transform: {part}")
                 transform = transforms.Compose(transform_list)
         if CLASSES == None or IMG_WIDTH == None or IMG_HEIGHT == None or IMG_CHANNELS == None:
+            auto_annotation = False
             print("Model metadata not found, auto annotation will not be available.\n")
         else:
             print("Model loaded successfully.\n")
@@ -241,7 +244,7 @@ while True:
         confidence = [x / sum(output) for x in output]
         obj_class = np.argmax(output)
         obj_confidence = confidence[obj_class]
-        if obj_confidence > 0.8:
+        if obj_confidence > 0.99:
             predicted_class = obj_class
 
 

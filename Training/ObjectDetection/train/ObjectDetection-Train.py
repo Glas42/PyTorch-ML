@@ -28,8 +28,7 @@ MODEL_PATH = PATH + "\\ModelFiles\\Models"
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 NUM_EPOCHS = 100
 BATCH_SIZE = 100
-NUM_CLASSES = 10
-NUM_BBOX = 4
+CLASSES = 3 * 4
 IMG_WIDTH = 252
 IMG_HEIGHT = 252
 IMG_CHANNELS = ['Grayscale', 'Binarize', 'RGB', 'RG', 'GB', 'RB', 'R', 'G', 'B'][0]
@@ -70,8 +69,7 @@ print()
 print(timestamp() + "Training settings:")
 print(timestamp() + "> Epochs:", NUM_EPOCHS)
 print(timestamp() + "> Batch size:", BATCH_SIZE)
-print(timestamp() + "> Classes:", NUM_CLASSES)
-print(timestamp() + "> Bounding boxes:", NUM_BBOX)
+print(timestamp() + "> Classes:", CLASSES)
 print(timestamp() + "> Images:", IMG_COUNT)
 print(timestamp() + "> Image width:", IMG_WIDTH)
 print(timestamp() + "> Image height:", IMG_HEIGHT)
@@ -122,21 +120,24 @@ def load_data():
             if IMG_CHANNELS == 'Binarize':
                 img = cv2.threshold(img, 0.5, 1.0, cv2.THRESH_BINARY)[1]
 
-            bbox_file = os.path.join(DATA_PATH, file.replace(".png", ".txt"))
-            if os.path.exists(bbox_file):
-                with open(bbox_file, 'r') as f:
-                    content = f.read().strip().split('\n')
-                    for line in content:
-                        class_id, center_x, center_y, width, height = [float(x) for x in line.split(',')]
-                        bbox = np.array([class_id, center_x, center_y, width, height])
-                        user_inputs.append(bbox)
+            user_inputs_file = os.path.join(DATA_PATH, file.replace(".png", ".txt"))
+            if os.path.exists(user_inputs_file):
+                with open(user_inputs_file, 'r') as f:
+                    content = str(f.read())
+                    user_input = []
+                    for bounding_box in content.split('\n'):
+                        user_input.append([float(j) for j in bounding_box.split(',')])
+                user_input = np.array(user_input, dtype=np.float32)
+                images.append(img)
+                user_inputs.append(user_input)
             else:
                 pass
 
         if len(images) % 100 == 0:
             print(f"\r{timestamp()}Loading dataset... ({round(100 * len(images) / IMG_COUNT)}%)", end='', flush=True)
 
-    return np.array(images, dtype=np.float32), np.array(user_inputs, dtype=np.float32)
+    user_inputs = np.stack(user_inputs, axis=0)  # Create a 3D tensor for the user inputs
+    return np.array(images, dtype=np.float32), user_inputs
 
 # Custom dataset class
 class CustomDataset(Dataset):
@@ -152,45 +153,45 @@ class CustomDataset(Dataset):
         image = self.images[idx]
         user_input = self.user_inputs[idx]
         image = self.transform(image)
-        return image, torch.as_tensor(user_input, dtype=torch.float32)
+        return image, user_input
 
 # Define the model
-class ObjectDetectionModel(nn.Module):
-    def __init__(self):
-        super(ObjectDetectionModel, self).__init__()
-        self.features = nn.Sequential(
-            nn.Conv2d(COLOR_CHANNELS, 32, kernel_size=3, stride=1, padding=1),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=2, stride=2),
-            nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=2, stride=2),
-            nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=2, stride=2),
-            nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=2, stride=2),
-        )
-        self.classifier = nn.Sequential(
-            nn.Dropout(DROPOUT),
-            nn.Linear(256 * (IMG_HEIGHT // 16) * (IMG_WIDTH // 16), 512),
-            nn.ReLU(inplace=True),
-            nn.Dropout(DROPOUT),
-            nn.Linear(512, NUM_CLASSES + NUM_BBOX),
-        )
+class NeuralNetwork(nn.Module):
+    def __init__(self, img_channels, color_channels):
+        super(NeuralNetwork, self).__init__()
+        self.img_channels = img_channels
+        self.color_channels = color_channels
+        self.conv1 = nn.Conv2d(self.color_channels, 32, kernel_size=3, stride=1, padding=1)
+        self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.conv2 = nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1)
+        self.pool2 = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.conv3 = nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1)
+        self.pool3 = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.fc1 = nn.Linear(128 * (IMG_HEIGHT // 8) * (IMG_WIDTH // 8), 256)
+        self.dropout = nn.Dropout(DROPOUT)
+        self.fc2 = nn.Linear(256, 12)
 
     def forward(self, x):
-        x = self.features(x)
+        x = self.conv1(x)
+        x = nn.ReLU()(x)
+        x = self.pool1(x)
+        x = self.conv2(x)
+        x = nn.ReLU()(x)
+        x = self.pool2(x)
+        x = self.conv3(x)
+        x = nn.ReLU()(x)
+        x = self.pool3(x)
         x = x.view(x.size(0), -1)
-        output = self.classifier(x)
-        class_scores = output[:, :NUM_CLASSES]
-        bbox_outputs = output[:, NUM_CLASSES:]
-        return class_scores, bbox_outputs
+        x = self.fc1(x)
+        x = nn.ReLU()(x)
+        x = self.dropout(x)
+        x = self.fc2(x)
+        x = x.view(x.size(0), 3, 4)
+        return x
 
 def main():
     # Initialize model
-    model = ObjectDetectionModel().to(DEVICE)
+    model = NeuralNetwork(IMG_CHANNELS, COLOR_CHANNELS).to(DEVICE)
 
     def get_model_size_mb(model):
         total_params = 0
@@ -252,8 +253,7 @@ def main():
 
     # Initialize scaler, loss function, optimizer and scheduler
     scaler = GradScaler()
-    class_criterion = nn.CrossEntropyLoss()
-    bbox_criterion = nn.MSELoss()
+    criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
     scheduler = lr_scheduler.OneCycleLR(optimizer, max_lr=MAX_LEARNING_RATE, steps_per_epoch=len(train_dataloader), epochs=NUM_EPOCHS)
 
@@ -317,18 +317,16 @@ def main():
         # Training phase
         model.train()
         running_training_loss = 0.0
-        for data in train_dataloader:
-            images, labels = data
-            images, labels = images.to(DEVICE), labels.to(DEVICE)
+        for i, data in enumerate(train_dataloader, 0):
+            inputs, labels = data[0].to(DEVICE, non_blocking=True), data[1].to(DEVICE, non_blocking=True)
             optimizer.zero_grad()
             with autocast():
-                class_scores, bbox_outputs = model(images)
-                class_loss = class_criterion(class_scores, labels[:, 0].long())
-                bbox_loss = bbox_criterion(bbox_outputs, labels[:, 1:])
-                loss = class_loss + bbox_loss
+                outputs = model(inputs)
+                loss = criterion(outputs, labels)
             scaler.scale(loss).backward()
             scaler.step(optimizer)
             scaler.update()
+            scheduler.step()
             running_training_loss += loss.item()
         running_training_loss /= len(train_dataloader)
         training_loss = running_training_loss
@@ -341,15 +339,12 @@ def main():
         # Validation phase
         model.eval()
         running_validation_loss = 0.0
-        for data in val_dataloader:
-            images, labels = data
-            images, labels = images.to(DEVICE), labels.to(DEVICE)
-            with torch.no_grad():
-                class_scores, bbox_outputs = model(images)
-                class_loss = class_criterion(class_scores, labels[:, 0].long())
-                bbox_loss = bbox_criterion(bbox_outputs, labels[:, 1:])
-                loss = class_loss + bbox_loss
-            running_validation_loss += loss.item()
+        with torch.no_grad(), autocast():
+            for i, data in enumerate(val_dataloader, 0):
+                inputs, labels = data[0].to(DEVICE, non_blocking=True), data[1].to(DEVICE, non_blocking=True)
+                outputs = model(inputs)
+                loss = criterion(outputs, labels)
+                running_validation_loss += loss.item()
         running_validation_loss /= len(val_dataloader)
         validation_loss = running_validation_loss
 
@@ -411,13 +406,12 @@ def main():
     print(timestamp() + "Saving the last model...")
 
     metadata_optimizer = str(optimizer).replace('\n', '')
-    metadata_criterion = str(class_criterion).replace('\n', '') + ', ' + str(bbox_criterion).replace('\n', '')
+    metadata_criterion = str(criterion).replace('\n', '')
     metadata_model = str(model).replace('\n', '')
     metadata = (f"epochs#{epoch+1}",
                 f"batch#{BATCH_SIZE}",
-                f"classes#{NUM_CLASSES}",
-                f"bboxes#{NUM_BBOX}",
-                f"outputs#{NUM_CLASSES+NUM_BBOX}",
+                f"classes#{CLASSES}",
+                f"outputs#{CLASSES}",
                 f"image_count#{IMG_COUNT}",
                 f"image_width#{IMG_WIDTH}",
                 f"image_height#{IMG_HEIGHT}",
@@ -444,8 +438,8 @@ def main():
                 f"loss_function#{metadata_criterion}",
                 f"training_size#{train_size}",
                 f"validation_size#{val_size}",
-                f"training_loss#{best_model_training_loss}",
-                f"validation_loss#{best_model_validation_loss}")
+                f"training_loss#0",
+                f"validation_loss#0")
     metadata = {"data": metadata}
     metadata = {data: str(value).encode("ascii") for data, value in metadata.items()}
 
@@ -460,17 +454,29 @@ def main():
             print(timestamp() + "Failed to save the last model. Retrying...")
     print(timestamp() + "Last model saved successfully.") if last_model_saved else print(timestamp() + "Failed to save the last model.")
 
+    run_model = best_model
+    run_model.eval()
+    run_model.to(DEVICE)
+    for file in os.listdir(f"{DATA_PATH}"):
+        if file.endswith(".png"):
+            frame = cv2.imread(os.path.join(f"{DATA_PATH}/{file}"))
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            frame = cv2.resize(frame, (IMG_WIDTH, IMG_HEIGHT))
+            frame = frame / 255
+            outputs = model(frame).tolist()
+            print(timestamp() + f"Predicted: {outputs}")
+            time.sleep(1)
+
     # Save the best model
     print(timestamp() + "Saving the best model...")
 
     metadata_optimizer = str(optimizer).replace('\n', '')
-    metadata_criterion = str(class_criterion).replace('\n', '') + ', ' + str(bbox_criterion).replace('\n', '')
+    metadata_criterion = str(criterion).replace('\n', '')
     metadata_model = str(best_model).replace('\n', '')
     metadata = (f"epochs#{best_model_epoch+1}",
                 f"batch#{BATCH_SIZE}",
-                f"classes#{NUM_CLASSES}",
-                f"bboxes#{NUM_BBOX}",
-                f"outputs#{NUM_CLASSES+NUM_BBOX}",
+                f"classes#{CLASSES}",
+                f"outputs#{CLASSES}",
                 f"image_count#{IMG_COUNT}",
                 f"image_width#{IMG_WIDTH}",
                 f"image_height#{IMG_HEIGHT}",
@@ -497,8 +503,8 @@ def main():
                 f"loss_function#{metadata_criterion}",
                 f"training_size#{train_size}",
                 f"validation_size#{val_size}",
-                f"training_loss#{training_loss}",
-                f"validation_loss#{validation_loss}")
+                f"training_loss#0",
+                f"validation_loss#0")
     metadata = {"data": metadata}
     metadata = {data: str(value).encode("ascii") for data, value in metadata.items()}
 
