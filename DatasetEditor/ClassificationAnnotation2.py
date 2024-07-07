@@ -5,14 +5,13 @@ import cv2
 import os
 
 images = []
-frame_width = 600
+frame_width = 800
 frame_height = 600
 last_left_clicked = False
 window_name = "Classification - Annotiation"
 PATH = os.path.dirname(os.path.dirname(__file__)) + "\\ModelFiles\\"
 
-classes = ["0", "1", "2", "3"]
-# 4 classes (0=red 1=yellow 2=green 3=nothing)
+classes = ["0", "1", "2"]
 
 
 def get_text_size(text="NONE", text_width=0.5*frame_width, max_text_height=0.5*frame_height):
@@ -249,26 +248,22 @@ while True:
 
 
     if predicted_class == None:
-        class_0_color = (0, 0, 200)
-        class_1_color = (0, 200, 200)
-        class_2_color = (0, 200, 0)
-        class_3_color = (200, 0, 0)
+        class_0_color = (0, 200, 0)
+        class_1_color = (0, 0, 200)
+        class_2_color = (200, 0, 0)
     else:
         class_0_color = (50, 50, 50)
         class_1_color = (50, 50, 50)
         class_2_color = (50, 50, 50)
-        class_3_color = (50, 50, 50)
         if predicted_class == 0:
-            class_0_color = (0, 0, 200)
+            class_0_color = (0, 200, 0)
         elif predicted_class == 1:
-            class_1_color = (0, 200, 200)
+            class_1_color = (0, 0, 200)
         elif predicted_class == 2:
-            class_2_color = (0, 200, 0)
-        elif predicted_class == 3:
-            class_3_color = (200, 0, 0)
+            class_2_color = (200, 0, 0)
 
 
-    button_class_0_pressed, button_class_0_hovered = make_button(text="Red (Class 0)",
+    button_class_0_pressed, button_class_0_hovered = make_button(text="Vehicle (Class 0)",
                                                             x1=0.52*frame_width,
                                                             y1=0.25*frame_height,
                                                             x2=0.98*frame_width,
@@ -281,7 +276,7 @@ while True:
                                                             width_scale=0.95,
                                                             height_scale=0.5)
 
-    button_class_1_pressed, button_class_1_hovered = make_button(text="Yellow (Class 1)",
+    button_class_1_pressed, button_class_1_hovered = make_button(text="No Vehicle (Class 1)",
                                                             x1=0.52*frame_width,
                                                             y1=0.425*frame_height,
                                                             x2=0.98*frame_width,
@@ -294,7 +289,7 @@ while True:
                                                             width_scale=0.95,
                                                             height_scale=0.5)
 
-    button_class_2_pressed, button_class_2_hovered = make_button(text="Green (Class 2)",
+    button_class_2_pressed, button_class_2_hovered = make_button(text="No Mirror (Class 2)",
                                                             x1=0.52*frame_width,
                                                             y1=0.6*frame_height,
                                                             x2=0.98*frame_width,
@@ -303,19 +298,6 @@ while True:
                                                             buttoncolor=class_2_color,
                                                             buttonhovercolor=(class_2_color[0]+20, class_2_color[1]+20, class_2_color[2]+20),
                                                             buttonselectedcolor=(class_2_color[0]+20, class_2_color[1]+20, class_2_color[2]+20),
-                                                            textcolor=(255, 255, 255),
-                                                            width_scale=0.95,
-                                                            height_scale=0.5)
-
-    button_class_3_pressed, button_class_3_hovered = make_button(text="Nothing (Class 3)",
-                                                            x1=0.52*frame_width,
-                                                            y1=0.83*frame_height,
-                                                            x2=0.98*frame_width,
-                                                            y2=0.98*frame_height,
-                                                            round_corners=30,
-                                                            buttoncolor=class_3_color,
-                                                            buttonhovercolor=(class_3_color[0]+20, class_3_color[1]+20, class_3_color[2]+20),
-                                                            buttonselectedcolor=(class_3_color[0]+20, class_3_color[1]+20, class_3_color[2]+20),
                                                             textcolor=(255, 255, 255),
                                                             width_scale=0.95,
                                                             height_scale=0.5)
@@ -353,8 +335,6 @@ while True:
         button_class_1_pressed = True
     elif predicted_class == 2:
         button_class_2_pressed = True
-    elif predicted_class == 3:
-        button_class_3_pressed = True
 
 
     if button_class_0_pressed == True:
@@ -373,12 +353,6 @@ while True:
         with open(os.path.join(f"{PATH}EditedTrainingData/{file.replace('.png', '.txt')}"), 'w') as f:
             f.truncate(0)
             f.write("2")
-            f.close()
-        index += 1
-    elif button_class_3_pressed == True:
-        with open(os.path.join(f"{PATH}EditedTrainingData/{file.replace('.png', '.txt')}"), 'w') as f:
-            f.truncate(0)
-            f.write("3")
             f.close()
         index += 1
     elif button_back_pressed == True:

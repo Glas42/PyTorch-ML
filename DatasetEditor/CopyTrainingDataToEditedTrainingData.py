@@ -26,9 +26,12 @@ for file in os.listdir(f"{PATH}TrainingData"):
     if file.endswith(".png"):
         if os.path.exists(os.path.join(f"{PATH}EditedTrainingData", file)) == False or overwrite:
             if new_names:
-                name = str(len(os.listdir(f"{PATH}EditedTrainingData")) // 2 + 1) + "." + file.split('.')[-1]
+                name = str(len(os.listdir(f"{PATH}EditedTrainingData")) // (2 if os.path.exists(f"{PATH}TrainingData{file.replace('.png', '.txt')}") else 1) + 1) + "." + file.split('.')[-1]
             shutil.copy2(os.path.join(f"{PATH}TrainingData", file), os.path.join(f"{PATH}EditedTrainingData", name if new_names else file.replace(".", "_")))
-            shutil.copy2(os.path.join(f"{PATH}TrainingData", file.replace(".png", ".txt")), os.path.join(f"{PATH}EditedTrainingData", name.replace(".png", ".txt") if new_names else file.replace(".png", ".txt").replace(".", "_")))
+            try:
+                shutil.copy2(os.path.join(f"{PATH}TrainingData", file.replace(".png", ".txt")), os.path.join(f"{PATH}EditedTrainingData", name.replace(".png", ".txt") if new_names else file.replace(".png", ".txt").replace(".", "_")))
+            except:
+                pass
 print("Images copied.")
 
 corrupted_images = 0
