@@ -101,7 +101,6 @@ while True:
 
     for i, (top_left, bottom_right) in enumerate(coords):
         frame = frame_original[top_left[1]:bottom_right[1], top_left[0]:bottom_right[0]].copy()
-        frame = frame[int(frame.shape[0]/2):frame.shape[0], 0:frame.shape[1]]
         frame = np.array(frame, dtype=np.float32)
 
         if IMG_CHANNELS == 'Grayscale' or IMG_CHANNELS == 'Binarize':
