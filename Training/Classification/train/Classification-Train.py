@@ -304,19 +304,18 @@ def main():
             return str_num
         while PROGRESS_PRINT == "initializing":
             time.sleep(1)
+        last_message = ""
         while PROGRESS_PRINT == "running":
-
             progress = (time.time() - epoch_total_start_time) / epoch_total_time
             if progress > 1: progress = 1
             if progress < 0: progress = 0
-
             progress = '█' * int(progress * 10) + '░' * (10 - int(progress * 10))
             epoch_time = round(epoch_total_time, 2) if epoch_total_time > 1 else round((epoch_total_time) * 1000)
             eta = time.strftime('%H:%M:%S', time.gmtime(round((training_time_prediction - training_start_time) / (training_epoch + 1) * NUM_EPOCHS - (training_time_prediction - training_start_time) + (training_time_prediction - time.time()), 2)))
-
-            print(f"\r{progress} Epoch {training_epoch+1}, Train Loss: {num_to_str(training_loss)}, Val Loss: {num_to_str(validation_loss)}, {epoch_time}{'s' if epoch_total_time > 1 else 'ms'}/Epoch, ETA: {eta}                       ", end='', flush=True)
-
-            time.sleep(epoch_total_time/10 if epoch_total_time/10 >= 0.1 else 0.1)
+            message = f"{progress} Epoch {training_epoch+1}, Train Loss: {num_to_str(training_loss)}, Val Loss: {num_to_str(validation_loss)}, {epoch_time}{'s' if epoch_total_time > 1 else 'ms'}/Epoch, ETA: {eta}"
+            print(f"\r{message}" + (" " * (len(last_message) - len(message)) if len(last_message) > len(message) else ""), end='', flush=True)
+            last_message = message
+            time.sleep(1)
         if PROGRESS_PRINT == "early stopped":
             print(f"\rEarly stopping at Epoch {training_epoch+1}, Train Loss: {num_to_str(training_loss)}, Val Loss: {num_to_str(validation_loss)}                                              ", end='', flush=True)
         elif PROGRESS_PRINT == "finished":

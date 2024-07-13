@@ -69,9 +69,16 @@ for var in metadata:
 
 cv2.namedWindow('frame', cv2.WINDOW_NORMAL)
 cv2.setWindowProperty('frame', cv2.WND_PROP_TOPMOST, 1)
-cv2.resizeWindow('frame', round(IMG_WIDTH*4), round(IMG_HEIGHT*2))
+cv2.resizeWindow('frame', round(IMG_WIDTH*2), round(IMG_HEIGHT))
+cv2.namedWindow('left_mirror', cv2.WINDOW_NORMAL)
+cv2.setWindowProperty('left_mirror', cv2.WND_PROP_TOPMOST, 1)
+cv2.resizeWindow('left_mirror', 300, 300)
+cv2.namedWindow('right_mirror', cv2.WINDOW_NORMAL)
+cv2.setWindowProperty('right_mirror', cv2.WND_PROP_TOPMOST, 1)
+cv2.resizeWindow('right_mirror', 300, 300)
 
 background = np.zeros((IMG_HEIGHT, IMG_WIDTH*2, 3), dtype=np.uint8)
+graph_background = np.zeros((300, 300, 3), dtype=np.uint8)
 
 while True:
     start = time.time()
@@ -104,7 +111,7 @@ while True:
         frame = np.array(frame, dtype=np.float32)
 
         if IMG_CHANNELS == 'Grayscale' or IMG_CHANNELS == 'Binarize':
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            frame = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
         else:
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
@@ -147,6 +154,12 @@ while True:
             color = (255, 0, 0)
 
         cv2.rectangle(frame_original, top_left, bottom_right, color, 4)
+
+        mirror = graph_background.copy()
+        cv2.rectangle(mirror, (0, mirror.shape[0] - 1), (99, mirror.shape[0] - 1 - round(300 * confidence[0])), (0, 255, 0), -1)
+        cv2.rectangle(mirror, (100, mirror.shape[0] - 1), (199, mirror.shape[0] - 1 - round(300 * confidence[1])), (0, 0, 255), -1)
+        cv2.rectangle(mirror, (200, mirror.shape[0] - 1), (299, mirror.shape[0] - 1 - round(300 * confidence[2])), (255, 0, 0), -1)
+        cv2.imshow(f'{"left" if i == 0 else "right"}_mirror', mirror)
 
     frame = background.copy()
     frame[0:IMG_HEIGHT, 0:IMG_WIDTH, :] = cv2.resize(frame_original[left_top_left[1]:left_bottom_right[1], left_top_left[0]:left_bottom_right[0]], (IMG_WIDTH, IMG_HEIGHT))
