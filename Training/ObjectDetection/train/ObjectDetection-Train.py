@@ -27,10 +27,10 @@ DATA_PATH = PATH + "\\ModelFiles\\EditedTrainingData"
 MODEL_PATH = PATH + "\\ModelFiles\\Models"
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 NUM_EPOCHS = 100
-BATCH_SIZE = 100
-CLASSES = 3 * 4
-IMG_WIDTH = 252
-IMG_HEIGHT = 252
+BATCH_SIZE = 500
+CLASSES = 4
+IMG_WIDTH = 90
+IMG_HEIGHT = 150
 IMG_CHANNELS = ['Grayscale', 'Binarize', 'RGB', 'RG', 'GB', 'RB', 'R', 'G', 'B'][0]
 LEARNING_RATE = 0.001
 MAX_LEARNING_RATE = 0.001
@@ -124,10 +124,9 @@ def load_data():
             if os.path.exists(user_inputs_file):
                 with open(user_inputs_file, 'r') as f:
                     content = str(f.read())
-                    user_input = []
-                    for bounding_box in content.split('\n'):
-                        user_input.append([float(j) for j in bounding_box.split(',')])
-                user_input = np.array(user_input, dtype=np.float32)
+                    if content.isdigit() and 0 <= int(content) < CLASSES:
+                        user_input = [0] * CLASSES
+                        user_input[int(content)] = 1
                 images.append(img)
                 user_inputs.append(user_input)
             else:
@@ -136,8 +135,7 @@ def load_data():
         if len(images) % 100 == 0:
             print(f"\r{timestamp()}Loading dataset... ({round(100 * len(images) / IMG_COUNT)}%)", end='', flush=True)
 
-    user_inputs = np.stack(user_inputs, axis=0)  # Create a 3D tensor for the user inputs
-    return np.array(images, dtype=np.float32), user_inputs
+    return np.array(images, dtype=np.float32), np.array(user_inputs, dtype=np.float32)
 
 # Custom dataset class
 class CustomDataset(Dataset):
@@ -153,45 +151,63 @@ class CustomDataset(Dataset):
         image = self.images[idx]
         user_input = self.user_inputs[idx]
         image = self.transform(image)
-        return image, user_input
+        return image, torch.as_tensor(user_input, dtype=torch.float32)
 
 # Define the model
-class NeuralNetwork(nn.Module):
-    def __init__(self, img_channels, color_channels):
-        super(NeuralNetwork, self).__init__()
-        self.img_channels = img_channels
-        self.color_channels = color_channels
-        self.conv1 = nn.Conv2d(self.color_channels, 32, kernel_size=3, stride=1, padding=1)
-        self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2)
-        self.conv2 = nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1)
-        self.pool2 = nn.MaxPool2d(kernel_size=2, stride=2)
-        self.conv3 = nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1)
-        self.pool3 = nn.MaxPool2d(kernel_size=2, stride=2)
-        self.fc1 = nn.Linear(128 * (IMG_HEIGHT // 8) * (IMG_WIDTH // 8), 256)
+class ConvolutionalNeuralNetwork(nn.Module):
+    def __init__(self):
+        super(ConvolutionalNeuralNetwork, self).__init__()
+        self.conv2d_1 = nn.Conv2d(COLOR_CHANNELS, 32, (3, 3), padding=1, bias=False)
+        self.bn1 = nn.BatchNorm2d(32)
+        self.relu_1 = nn.ReLU()
+        self.maxpool_1 = nn.MaxPool2d((2, 2))
+
+        self.conv2d_2 = nn.Conv2d(32, 64, (3, 3), padding=1, bias=False)
+        self.bn2 = nn.BatchNorm2d(64)
+        self.relu_2 = nn.ReLU()
+        self.maxpool_2 = nn.MaxPool2d((2, 2))
+
+        self.conv2d_3 = nn.Conv2d(64, 128, (3, 3), padding=1, bias=False)
+        self.bn3 = nn.BatchNorm2d(128)
+        self.relu_3 = nn.ReLU()
+        self.maxpool_3 = nn.MaxPool2d((2, 2))
+
+        self.flatten = nn.Flatten()
         self.dropout = nn.Dropout(DROPOUT)
-        self.fc2 = nn.Linear(256, 12)
+        self.linear_1 = nn.Linear(128 * (IMG_WIDTH // 8) * (IMG_HEIGHT // 8), 256, bias=False)
+        self.bn4 = nn.BatchNorm1d(256)
+        self.relu_4 = nn.ReLU()
+        self.linear_2 = nn.Linear(256, CLASSES, bias=False)
+        self.softmax = nn.Softmax(dim=1)
 
     def forward(self, x):
-        x = self.conv1(x)
-        x = nn.ReLU()(x)
-        x = self.pool1(x)
-        x = self.conv2(x)
-        x = nn.ReLU()(x)
-        x = self.pool2(x)
-        x = self.conv3(x)
-        x = nn.ReLU()(x)
-        x = self.pool3(x)
-        x = x.view(x.size(0), -1)
-        x = self.fc1(x)
-        x = nn.ReLU()(x)
+        x = self.conv2d_1(x)
+        x = self.bn1(x)
+        x = self.relu_1(x)
+        x = self.maxpool_1(x)
+
+        x = self.conv2d_2(x)
+        x = self.bn2(x)
+        x = self.relu_2(x)
+        x = self.maxpool_2(x)
+
+        x = self.conv2d_3(x)
+        x = self.bn3(x)
+        x = self.relu_3(x)
+        x = self.maxpool_3(x)
+
+        x = self.flatten(x)
         x = self.dropout(x)
-        x = self.fc2(x)
-        x = x.view(x.size(0), 3, 4)
+        x = self.linear_1(x)
+        x = self.bn4(x)
+        x = self.relu_4(x)
+        x = self.linear_2(x)
+        x = self.softmax(x)
         return x
 
 def main():
     # Initialize model
-    model = NeuralNetwork(IMG_CHANNELS, COLOR_CHANNELS).to(DEVICE)
+    model = ConvolutionalNeuralNetwork().to(DEVICE)
 
     def get_model_size_mb(model):
         total_params = 0
@@ -253,7 +269,7 @@ def main():
 
     # Initialize scaler, loss function, optimizer and scheduler
     scaler = GradScaler()
-    criterion = nn.MSELoss()
+    criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
     scheduler = lr_scheduler.OneCycleLR(optimizer, max_lr=MAX_LEARNING_RATE, steps_per_epoch=len(train_dataloader), epochs=NUM_EPOCHS)
 
@@ -288,19 +304,18 @@ def main():
             return str_num
         while PROGRESS_PRINT == "initializing":
             time.sleep(1)
+        last_message = ""
         while PROGRESS_PRINT == "running":
-
             progress = (time.time() - epoch_total_start_time) / epoch_total_time
             if progress > 1: progress = 1
             if progress < 0: progress = 0
-
             progress = '█' * int(progress * 10) + '░' * (10 - int(progress * 10))
             epoch_time = round(epoch_total_time, 2) if epoch_total_time > 1 else round((epoch_total_time) * 1000)
             eta = time.strftime('%H:%M:%S', time.gmtime(round((training_time_prediction - training_start_time) / (training_epoch + 1) * NUM_EPOCHS - (training_time_prediction - training_start_time) + (training_time_prediction - time.time()), 2)))
-
-            print(f"\r{progress} Epoch {training_epoch+1}, Train Loss: {num_to_str(training_loss)}, Val Loss: {num_to_str(validation_loss)}, {epoch_time}{'s' if epoch_total_time > 1 else 'ms'}/Epoch, ETA: {eta}                       ", end='', flush=True)
-
-            time.sleep(epoch_total_time/10 if epoch_total_time/10 >= 0.1 else 0.1)
+            message = f"{progress} Epoch {training_epoch+1}, Train Loss: {num_to_str(training_loss)}, Val Loss: {num_to_str(validation_loss)}, {epoch_time}{'s' if epoch_total_time > 1 else 'ms'}/Epoch, ETA: {eta}"
+            print(f"\r{message}" + (" " * (len(last_message) - len(message)) if len(last_message) > len(message) else ""), end='', flush=True)
+            last_message = message
+            time.sleep(1)
         if PROGRESS_PRINT == "early stopped":
             print(f"\rEarly stopping at Epoch {training_epoch+1}, Train Loss: {num_to_str(training_loss)}, Val Loss: {num_to_str(validation_loss)}                                              ", end='', flush=True)
         elif PROGRESS_PRINT == "finished":
@@ -405,9 +420,6 @@ def main():
     # Save the last model
     print(timestamp() + "Saving the last model...")
 
-    metadata_optimizer = str(optimizer).replace('\n', '')
-    metadata_criterion = str(criterion).replace('\n', '')
-    metadata_model = str(model).replace('\n', '')
     metadata = (f"epochs#{epoch+1}",
                 f"batch#{BATCH_SIZE}",
                 f"classes#{CLASSES}",
@@ -416,30 +428,7 @@ def main():
                 f"image_width#{IMG_WIDTH}",
                 f"image_height#{IMG_HEIGHT}",
                 f"image_channels#{IMG_CHANNELS}",
-                f"color_channels#{COLOR_CHANNELS}",
-                f"learning_rate#{LEARNING_RATE}",
-                f"max_learning_rate#{MAX_LEARNING_RATE}",
-                f"dataset_split#{TRAIN_VAL_RATIO}",
-                f"number_of_workers#{NUM_WORKERS}",
-                f"dropout#{DROPOUT}",
-                f"patience#{PATIENCE}",
-                f"shuffle#{SHUFFLE}",
-                f"pin_memory#{PIN_MEMORY}",
-                f"training_time#{TRAINING_TIME}",
-                f"training_date#{TRAINING_DATE}",
-                f"training_device#{DEVICE}",
-                f"training_os#{os.name}",
-                f"architecture#{metadata_model}",
-                f"torch_version#{torch.__version__}",
-                f"numpy_version#{np.__version__}",
-                f"pil_version#{Image.__version__}",
-                f"transform#{transform}",
-                f"optimizer#{metadata_optimizer}",
-                f"loss_function#{metadata_criterion}",
-                f"training_size#{train_size}",
-                f"validation_size#{val_size}",
-                f"training_loss#0",
-                f"validation_loss#0")
+                f"color_channels#{COLOR_CHANNELS}")
     metadata = {"data": metadata}
     metadata = {data: str(value).encode("ascii") for data, value in metadata.items()}
 
@@ -454,25 +443,9 @@ def main():
             print(timestamp() + "Failed to save the last model. Retrying...")
     print(timestamp() + "Last model saved successfully.") if last_model_saved else print(timestamp() + "Failed to save the last model.")
 
-    run_model = best_model
-    run_model.eval()
-    run_model.to(DEVICE)
-    for file in os.listdir(f"{DATA_PATH}"):
-        if file.endswith(".png"):
-            frame = cv2.imread(os.path.join(f"{DATA_PATH}/{file}"))
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            frame = cv2.resize(frame, (IMG_WIDTH, IMG_HEIGHT))
-            frame = frame / 255
-            outputs = model(frame).tolist()
-            print(timestamp() + f"Predicted: {outputs}")
-            time.sleep(1)
-
     # Save the best model
     print(timestamp() + "Saving the best model...")
 
-    metadata_optimizer = str(optimizer).replace('\n', '')
-    metadata_criterion = str(criterion).replace('\n', '')
-    metadata_model = str(best_model).replace('\n', '')
     metadata = (f"epochs#{best_model_epoch+1}",
                 f"batch#{BATCH_SIZE}",
                 f"classes#{CLASSES}",
@@ -481,30 +454,7 @@ def main():
                 f"image_width#{IMG_WIDTH}",
                 f"image_height#{IMG_HEIGHT}",
                 f"image_channels#{IMG_CHANNELS}",
-                f"color_channels#{COLOR_CHANNELS}",
-                f"learning_rate#{LEARNING_RATE}",
-                f"max_learning_rate#{MAX_LEARNING_RATE}",
-                f"dataset_split#{TRAIN_VAL_RATIO}",
-                f"number_of_workers#{NUM_WORKERS}",
-                f"dropout#{DROPOUT}",
-                f"patience#{PATIENCE}",
-                f"shuffle#{SHUFFLE}",
-                f"pin_memory#{PIN_MEMORY}",
-                f"training_time#{TRAINING_TIME}",
-                f"training_date#{TRAINING_DATE}",
-                f"training_device#{DEVICE}",
-                f"training_os#{os.name}",
-                f"architecture#{metadata_model}",
-                f"torch_version#{torch.__version__}",
-                f"numpy_version#{np.__version__}",
-                f"pil_version#{Image.__version__}",
-                f"transform#{transform}",
-                f"optimizer#{metadata_optimizer}",
-                f"loss_function#{metadata_criterion}",
-                f"training_size#{train_size}",
-                f"validation_size#{val_size}",
-                f"training_loss#0",
-                f"validation_loss#0")
+                f"color_channels#{COLOR_CHANNELS}")
     metadata = {"data": metadata}
     metadata = {data: str(value).encode("ascii") for data, value in metadata.items()}
 
