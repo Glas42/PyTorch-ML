@@ -2,7 +2,9 @@ from collections import Counter
 import torch
 
 
-def intersection_over_union(boxes_preds, boxes_labels):
+def intersection_over_union(boxes_preds=None, boxes_labels=None):
+    if boxes_preds is None or boxes_labels is None:
+        raise "Function: intersection_over_union() has missing parameters"
     """
     Calculates intersection over union
 
@@ -33,7 +35,9 @@ def intersection_over_union(boxes_preds, boxes_labels):
     return intersection / (box1_area + box2_area - intersection + 1e-6)
 
 
-def non_max_suppression(bboxes, iou_threshold, threshold):
+def non_max_suppression(bboxes=None, iou_threshold=None, threshold=None):
+    if bboxes is None or iou_threshold is None or threshold is None:
+        raise "Function: non_max_suppression() has missing parameters"
     """
     Does Non Max Suppression given bboxes
 
@@ -63,7 +67,9 @@ def non_max_suppression(bboxes, iou_threshold, threshold):
     return bboxes_after_nms
 
 
-def mean_average_precision(pred_boxes, true_boxes, iou_threshold=0.5, classes=10):
+def mean_average_precision(pred_boxes=None, true_boxes=None, iou_threshold=None, classes=None):
+    if pred_boxes is None or true_boxes is None or iou_threshold is None or classes is None:
+        raise "Function: mean_average_precision() has missing parameters"
     """
     Calculates mean average precision 
 
@@ -126,7 +132,9 @@ def mean_average_precision(pred_boxes, true_boxes, iou_threshold=0.5, classes=10
     return sum(average_precisions) / len(average_precisions)
 
 
-def get_bboxes(loader, model, iou_threshold, threshold, device="cpu"):
+def get_bboxes(loader=None, model=None, iou_threshold=None, threshold=None, split_size=None, classes=None, device=None):
+    if loader is None or model is None or iou_threshold is None or threshold is None or split_size is None or classes is None or device is None:
+        raise "Function: get_bboxes() has missing parameters"
     all_pred_boxes = []
     all_true_boxes = []
 
@@ -140,8 +148,8 @@ def get_bboxes(loader, model, iou_threshold, threshold, device="cpu"):
             predictions = model(x)
 
         batch_size = x.shape[0]
-        true_bboxes = cellboxes_to_boxes(labels)
-        bboxes = cellboxes_to_boxes(predictions)
+        true_bboxes = cellboxes_to_boxes(labels, split_size, classes, device)
+        bboxes = cellboxes_to_boxes(predictions, split_size, classes, device)
 
         for idx in range(batch_size):
             nms_boxes = non_max_suppression(
@@ -162,7 +170,9 @@ def get_bboxes(loader, model, iou_threshold, threshold, device="cpu"):
     return all_pred_boxes, all_true_boxes
 
 
-def convert_cellboxes(predictions, split_size=7, classes=10, device="cpu"):
+def convert_cellboxes(predictions=None, split_size=None, classes=None, device=None):
+    if predictions is None or split_size is None or classes is None or device is None:
+        raise "Function: convert_cellboxes() has missing parameters"
     """
     Converts bounding boxes output from Yolo with
     an image split size of S into entire image ratios
@@ -181,7 +191,7 @@ def convert_cellboxes(predictions, split_size=7, classes=10, device="cpu"):
     scores = torch.cat((predictions[..., classes].unsqueeze(0), predictions[..., classes + 5].unsqueeze(0)), dim=0)
     best_box = scores.argmax(0).unsqueeze(-1)
     best_boxes = bboxes1 * (1 - best_box) + best_box * bboxes2
-    cell_indices = torch.arange(7).repeat(batch_size, 7, 1).unsqueeze(-1)
+    cell_indices = torch.arange(split_size).repeat(batch_size, split_size, 1).unsqueeze(-1).to(device)
     x = 1 / split_size * (best_boxes[..., :1] + cell_indices)
     y = 1 / split_size * (best_boxes[..., 1:2] + cell_indices.permute(0, 2, 1, 3))
     w_y = 1 / split_size * best_boxes[..., 2:4]
@@ -192,8 +202,10 @@ def convert_cellboxes(predictions, split_size=7, classes=10, device="cpu"):
     return converted_preds
 
 
-def cellboxes_to_boxes(out, split_size=7):
-    converted_pred = convert_cellboxes(out, split_size).reshape(out.shape[0], split_size * split_size, -1)
+def cellboxes_to_boxes(out=None, split_size=None, classes=None, device=None):
+    if out is None or split_size is None or classes is None or device is None:
+        raise "Function: cellboxes_to_boxes() has missing parameters"
+    converted_pred = convert_cellboxes(out, split_size, classes, device).reshape(out.shape[0], split_size * split_size, -1)
     converted_pred[..., 0] = converted_pred[..., 0].long()
     all_bboxes = []
 

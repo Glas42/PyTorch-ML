@@ -17,10 +17,11 @@ import os
 
 PATH = os.path.dirname(__file__)
 DATA_PATH = os.path.join(PATH, 'dataset')
+
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-EPOCHS = 1000
-CLASSES = 10
-SPLIT_SIZE = 14
+EPOCHS = 10000
+CLASSES = 3
+SPLIT_SIZE = 7
 BOUNDINGBOXES = 2
 BATCH_SIZE = 4
 IMG_SIZE = 448
@@ -45,11 +46,11 @@ transform = Compose([
 def main():
     model = NeuralNetwork(split_size=7, boundingboxes=2, classes=CLASSES).to(DEVICE)
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
-    loss_fn = Loss()
+    loss_fn = Loss(split_size=SPLIT_SIZE, boundingboxes=BOUNDINGBOXES, classes=CLASSES)
 
-    train_dataset = CustomDataset(data_dir=DATA_PATH, transform=transform)
+    train_dataset = CustomDataset(data_dir=DATA_PATH, split_size=SPLIT_SIZE, boundingboxes=BOUNDINGBOXES, classes=CLASSES, transform=transform)
 
-    test_dataset = CustomDataset(data_dir=DATA_PATH, transform=transform)
+    test_dataset = CustomDataset(data_dir=DATA_PATH, split_size=SPLIT_SIZE, boundingboxes=BOUNDINGBOXES, classes=CLASSES, transform=transform)
 
     train_loader = DataLoader(
         dataset=train_dataset,
@@ -80,7 +81,7 @@ def main():
             mean_loss.append(loss.item())
             optimizer.zero_grad()
             loss.backward()
-            optimizer.step()        
+            optimizer.step()       
 
         model.eval()
 
@@ -88,7 +89,7 @@ def main():
             for x, y in test_loader:
                 x = x.to(DEVICE)
                 for idx in range(x.shape[0]):
-                    bboxes = cellboxes_to_boxes(model(x))
+                    bboxes = cellboxes_to_boxes(model(x), split_size=SPLIT_SIZE, classes=CLASSES, device=DEVICE)
                     bboxes = non_max_suppression(bboxes[idx], iou_threshold=0.5, threshold=0.4)
                     image = x[idx].permute(1,2,0).to(DEVICE)
                     image = (image * 255).byte().detach().cpu().numpy()
@@ -103,7 +104,7 @@ def main():
                     cv2.imshow('image', image)
                     cv2.waitKey(1)
 
-        pred_boxes, target_boxes = get_bboxes(test_loader, model, iou_threshold=0.5, threshold=0.4, device=DEVICE)
+        pred_boxes, target_boxes = get_bboxes(test_loader, model, iou_threshold=0.5, threshold=0.4, split_size=SPLIT_SIZE, classes=CLASSES, device=DEVICE)
         mean_avg_prec = mean_average_precision(pred_boxes, target_boxes, iou_threshold=0.5, classes=CLASSES)
     
         print(f"\nTrain mAP: {mean_avg_prec}")

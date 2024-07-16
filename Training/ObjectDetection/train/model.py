@@ -92,7 +92,9 @@ class NeuralNetwork(nn.Module):
                     in_channels = conv2[1]
         return nn.Sequential(*layers)
 
-    def _create_fcs(self, split_size, boundingboxes, classes):
+    def _create_fcs(self, split_size=None, boundingboxes=None, classes=None):
+        if split_size is None or boundingboxes is None or classes is None:
+            raise "Function: _create_fcs() of NeuralNetwork has missing parameters"
         S, B, C = split_size, boundingboxes, classes
         return nn.Sequential(
             nn.Flatten(),

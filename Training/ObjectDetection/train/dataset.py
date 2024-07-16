@@ -3,13 +3,15 @@ import torch
 import os
 
 class CustomDataset(torch.utils.data.Dataset):
-    def __init__(self, data_dir, split_size=7, boundingboxes=2, classes=10, transform=None):
+    def __init__(self, data_dir=None, split_size=None, boundingboxes=None, classes=None, transform=None):
+        if data_dir is None or split_size is None or boundingboxes is None or classes is None or transform is None:
+            raise "Function: __init__() of CustomDataset has missing parameters"
         self.data_dir = data_dir
         self.transform = transform
         self.split_size = split_size
         self.boundingboxes = boundingboxes
         self.classes = classes
-        self.files = [f for f in os.listdir(data_dir) if f.endswith('.png')]
+        self.files = [f for f in os.listdir(data_dir) if f.endswith('.jpg')]
 
     def __len__(self):
         return len(self.files)
@@ -17,7 +19,7 @@ class CustomDataset(torch.utils.data.Dataset):
     def __getitem__(self, index):
         img_name = self.files[index]
         img_path = os.path.join(self.data_dir, img_name)
-        label_path = os.path.join(self.data_dir, img_name.replace('.png', '.txt'))
+        label_path = os.path.join(self.data_dir, img_name.replace('.jpg', '.txt'))
         boxes = []
         with open(label_path) as f:
             for label in f.readlines():

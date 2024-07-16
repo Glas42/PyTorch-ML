@@ -3,7 +3,9 @@ import torch.nn as nn
 from utils import intersection_over_union
 
 class Loss(nn.Module):
-    def __init__(self, split_size=7, boundingboxes=2, classes=10):
+    def __init__(self, split_size=None, boundingboxes=None, classes=None):
+        if split_size is None or boundingboxes is None or classes is None:
+            raise "Function: __init__() of Loss has missing parameters"
         super(Loss, self).__init__()
         self.mse = nn.MSELoss(reduction="sum")
         self.split_size = split_size
@@ -13,7 +15,9 @@ class Loss(nn.Module):
         self.lambda_noobj = 0.5
         self.lambda_coord = 5
 
-    def forward(self, predictions, target):
+    def forward(self, predictions=None, target=None):
+        if predictions is None or target is None:
+            raise "Function: forward() of Loss has missing parameters"
         predictions = predictions.reshape(-1, self.split_size, self.split_size, self.classes + self.boundingboxes * 5)
         iou_b1 = intersection_over_union(predictions[..., self.classes + 1:self.classes + 5], target[..., self.classes + 1:self.classes + 5])
         iou_b2 = intersection_over_union(predictions[..., self.classes + 6:self.classes + 10], target[..., self.classes + 1:self.classes + 5])
