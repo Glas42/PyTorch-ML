@@ -637,9 +637,9 @@ def main():
                 running_validation_loss += loss.item()
 
             frame = np.zeros((IMG_SIZE * 2, IMG_SIZE * 2, 3), dtype=np.uint8)
-            random_indices = random.sample(range(len(train_dataloader.dataset)), 4)
+            random_indices = random.sample(range(len(val_dataloader.dataset)), 4)
             for i, idx in enumerate(random_indices):
-                x, y = train_dataloader.dataset[idx]
+                x, y = val_dataloader.dataset[idx]
                 x = x.unsqueeze(0).to(DEVICE)
                 bboxes = cellboxes_to_boxes(model(x))
                 bboxes = non_max_suppression(bboxes[0])
