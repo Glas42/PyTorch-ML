@@ -35,7 +35,7 @@ IMG_SIZE = 448
 IMG_CHANNELS = ['Grayscale', 'Binarize', 'RGB', 'RG', 'GB', 'RB', 'R', 'G', 'B'][2]
 IOU_THRESHOLD = 0.5
 CONFIDENCE_THRESHOLD = 0.5
-NMS_ACROSS_ALL_CLASSES = False
+NMS_ACROSS_ALL_CLASSES = True
 LEARNING_RATE = 0.0001
 MAX_LEARNING_RATE = 0.001
 TRAIN_VAL_RATIO = 0.8
@@ -270,6 +270,12 @@ def bbox_coverage_ratio(box):
     else:
         return round(float(area_in_image / area_total), 5)
 
+def RandomHorizontalFlip(img, bboxes):
+    if random.random() < 0.5:
+        img = transforms.functional.hflip(img)
+        bboxes[:, [0, 2]] = 1 - bboxes[:, [2, 0]]
+    return img, bboxes
+
 def RandomCrop(img, bboxes, min_width=0.3, min_height=0.3):
     any_bbox_in_image = False
     while any_bbox_in_image == False:
@@ -282,7 +288,7 @@ def RandomCrop(img, bboxes, min_width=0.3, min_height=0.3):
             bb_cy = (box[2] * img_height - i) / h
             bb_w = (box[3] * img_width) / w
             bb_h = (box[4] * img_height) / h
-            if bbox_coverage_ratio((bb_cx, bb_cy, bb_w, bb_h)) > 0.4:
+            if bbox_coverage_ratio((bb_cx, bb_cy, bb_w, bb_h)) > 0.25:
                 new_bboxes.append(torch.tensor([box[0], bb_cx, bb_cy, bb_w, bb_h]))
                 any_bbox_in_image = True
     return new_img, new_bboxes
@@ -504,14 +510,15 @@ def main():
 
         def __call__(self, img, bboxes):
             for t in self.transforms:
-                if t == "RandomCrop":
+                if t == "RandomHorizontalFlip":
+                    img, bboxes = RandomHorizontalFlip(img, bboxes)
+                elif t == "RandomCrop":
                     img, bboxes = RandomCrop(img, bboxes)
                 else:
                     img, bboxes = t(img), bboxes
             return img, bboxes
 
     train_transform = Compose([
-        "RandomCrop",
         transforms.Resize((IMG_SIZE, IMG_SIZE)),
         transforms.ToTensor()
     ])
