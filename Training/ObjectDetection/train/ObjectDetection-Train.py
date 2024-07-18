@@ -6,7 +6,6 @@ os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 
 from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import Dataset, DataLoader
-from torch.cuda.amp import GradScaler, autocast
 import torch.optim.lr_scheduler as lr_scheduler
 from torchvision import transforms
 from collections import Counter
@@ -20,13 +19,14 @@ import random
 import shutil
 import torch
 import time
+import cv2
 
 # Constants
 PATH = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 DATA_PATH = PATH + "\\ModelFiles\\EditedTrainingData"
 MODEL_PATH = PATH + "\\ModelFiles\\Models"
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-NUM_EPOCHS = 100
+NUM_EPOCHS = 300
 BATCH_SIZE = 4
 CLASSES = 3
 SPLIT_SIZE = 7
@@ -35,11 +35,12 @@ IMG_SIZE = 448
 IMG_CHANNELS = ['Grayscale', 'Binarize', 'RGB', 'RG', 'GB', 'RB', 'R', 'G', 'B'][2]
 IOU_THRESHOLD = 0.5
 CONFIDENCE_THRESHOLD = 0.5
+NMS_ACROSS_ALL_CLASSES = True
 LEARNING_RATE = 0.0001
-MAX_LEARNING_RATE = 0.0001
+MAX_LEARNING_RATE = 0.001
 TRAIN_VAL_RATIO = 0.8
 NUM_WORKERS = 0
-PATIENCE = 10
+PATIENCE = 100
 SHUFFLE = True
 PIN_MEMORY = True
 DROP_LAST = True
@@ -100,6 +101,9 @@ print(timestamp() + "> Images:", IMG_COUNT)
 print(timestamp() + "> Image size:", IMG_SIZE)
 print(timestamp() + "> Image channels:", IMG_CHANNELS)
 print(timestamp() + "> Color channels:", COLOR_CHANNELS)
+print(timestamp() + "> IOU threshold:", IOU_THRESHOLD)
+print(timestamp() + "> Confidence threshold:", CONFIDENCE_THRESHOLD)
+print(timestamp() + "> NMS across all classes:", NMS_ACROSS_ALL_CLASSES)
 print(timestamp() + "> Learning rate:", LEARNING_RATE)
 print(timestamp() + "> Max learning rate:", MAX_LEARNING_RATE)
 print(timestamp() + "> Dataset split:", TRAIN_VAL_RATIO)
@@ -135,11 +139,7 @@ def non_max_suppression(bboxes=None):
     bboxes_after_nms = []
     while bboxes:
         chosen_box = bboxes.pop(0)
-        bboxes = [
-            box
-            for box in bboxes
-            if box[0] != chosen_box[0]
-            or intersection_over_union(torch.tensor(chosen_box[2:]), torch.tensor(box[2:])) < IOU_THRESHOLD]
+        bboxes = [box for box in bboxes if ((True) if NMS_ACROSS_ALL_CLASSES else (box[0] != chosen_box[0])) or intersection_over_union(torch.tensor(chosen_box[2:]), torch.tensor(box[2:])) < IOU_THRESHOLD]
         bboxes_after_nms.append(chosen_box)
     return bboxes_after_nms
 
@@ -254,6 +254,39 @@ def cellboxes_to_boxes(out=None):
 
     return all_bboxes
 
+def bbox_coverage_ratio(box):
+    x1 = box[0] - box[2] / 2
+    y1 = box[1] - box[3] / 2
+    x2 = box[0] + box[2] / 2
+    y2 = box[1] + box[3] / 2
+    x1 = max(0, x1)
+    y1 = max(0, y1)
+    x2 = min(1, x2)
+    y2 = min(1, y2)
+    area_in_image = max(0, x2 - x1) * max(0, y2 - y1)
+    area_total = box[2] * box[3]
+    if area_total == 0:
+        return 0.0
+    else:
+        return round(float(area_in_image / area_total), 5)
+
+def RandomCrop(img, bboxes, min_width=0.3, min_height=0.3):
+    any_bbox_in_image = False
+    while any_bbox_in_image == False:
+        i, j, h, w = transforms.RandomCrop.get_params(img, output_size=(int(img.size[1] * random.uniform(min_height, 1.0)), int(img.size[0] * random.uniform(min_width, 1.0))))
+        img_width, img_height = img.size[0], img.size[1]
+        new_img = transforms.functional.crop(img, i, j, h, w)
+        new_bboxes = []
+        for box in bboxes:
+            bb_cx = (box[1] * img_width - j) / w
+            bb_cy = (box[2] * img_height - i) / h
+            bb_w = (box[3] * img_width) / w
+            bb_h = (box[4] * img_height) / h
+            if bbox_coverage_ratio((bb_cx, bb_cy, bb_w, bb_h)) > 0.2:
+                new_bboxes.append(torch.tensor([box[0], bb_cx, bb_cy, bb_w, bb_h]))
+                any_bbox_in_image = True
+    return new_img, new_bboxes
+
 class CustomDataset(Dataset):
     def __init__(self, transform=None):
         self.transform = transform
@@ -270,15 +303,28 @@ class CustomDataset(Dataset):
         with open(label_path) as f:
             for label in f.readlines():
                 class_label, x, y, width, height = [float(x) if float(x) != int(float(x)) else int(x) for x in label.replace("\n", "").split()]
+                x1 = x - width / 2
+                y1 = y - height / 2
+                x2 = x + width / 2
+                y2 = y + height / 2
+                x1 = max(0, min(1, x1))
+                y1 = max(0, min(1, y1))
+                x2 = max(0, min(1, x2))
+                y2 = max(0, min(1, y2))
+                x = (x1 + x2) / 2
+                y = (y1 + y2) / 2
+                width = x2 - x1
+                height = y2 - y1
                 boxes.append([class_label, x, y, width, height])
         image = Image.open(img_path).convert("RGB")
         boxes = torch.tensor(boxes)
         image, boxes = self.transform(image, boxes)
-        label_matrix = torch.zeros((SPLIT_SIZE, SPLIT_SIZE, CLASSES + 5 * BOUNDINGBOXES))
+        label_matrix = torch.zeros((SPLIT_SIZE, SPLIT_SIZE, CLASSES + BOUNDINGBOXES * 5))
         for box in boxes:
             class_label, x, y, width, height = box.tolist()
             class_label = int(class_label)
             i, j = int(SPLIT_SIZE * y), int(SPLIT_SIZE * x)
+            if i >= SPLIT_SIZE or j >= SPLIT_SIZE: continue
             x_cell, y_cell = SPLIT_SIZE * x - j, SPLIT_SIZE * y - i
             width_cell, height_cell = (width * SPLIT_SIZE, height * SPLIT_SIZE)
             if label_matrix[i, j, CLASSES] == 0:
@@ -455,26 +501,33 @@ def main():
 
         def __call__(self, img, bboxes):
             for t in self.transforms:
-                img, bboxes = t(img), bboxes
+                if t == RandomCrop:
+                    img, bboxes = RandomCrop(img, bboxes)
+                else:
+                    img, bboxes = t(img), bboxes
             return img, bboxes
 
     transform = Compose([
+        RandomCrop,
+        transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.1),
         transforms.Resize((IMG_SIZE, IMG_SIZE)),
         transforms.ToTensor(),
     ])
 
     # Create dataset
-    dataset = CustomDataset(transform=transform)
+    dataset = CustomDataset()
 
     # Split the dataset into training and validation sets
     train_size = int(TRAIN_VAL_RATIO * len(dataset))
     val_size = len(dataset) - train_size
     train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
+
+    train_dataset.dataset.transform = transform
+
     train_dataloader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=SHUFFLE, num_workers=NUM_WORKERS, pin_memory=PIN_MEMORY, drop_last=DROP_LAST)
     val_dataloader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=SHUFFLE, num_workers=NUM_WORKERS, pin_memory=PIN_MEMORY, drop_last=DROP_LAST)
 
-    # Initialize scaler, loss function, optimizer and scheduler
-    scaler = GradScaler()
+    # Initialize loss function, optimizer and scheduler
     loss_fn = Loss()
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
     scheduler = lr_scheduler.OneCycleLR(optimizer, max_lr=MAX_LEARNING_RATE, steps_per_epoch=len(train_dataloader), epochs=NUM_EPOCHS)
@@ -541,16 +594,15 @@ def main():
         model.train()
         running_training_loss = 0.0
         for i, data in enumerate(train_dataloader, 0):
-            inputs, labels = data[0].to(DEVICE, non_blocking=True), data[1].to(DEVICE, non_blocking=True)
-            optimizer.zero_grad()
-            with autocast():
+            with torch.set_grad_enabled(True):
+                inputs, labels = data[0].to(DEVICE, non_blocking=True), data[1].to(DEVICE, non_blocking=True)
                 outputs = model(inputs)
                 loss = loss_fn(outputs, labels)
-            scaler.scale(loss).backward()
-            scaler.step(optimizer)
-            scaler.update()
-            scheduler.step()
-            running_training_loss += loss.item()
+                loss.backward()
+                optimizer.step()
+                scheduler.step()
+                optimizer.zero_grad()
+                running_training_loss += loss.item()
         running_training_loss /= len(train_dataloader)
         training_loss = running_training_loss
 
@@ -562,12 +614,42 @@ def main():
         # Validation phase
         model.eval()
         running_validation_loss = 0.0
-        with torch.no_grad(), autocast():
+        with torch.no_grad():
             for i, data in enumerate(val_dataloader, 0):
                 inputs, labels = data[0].to(DEVICE, non_blocking=True), data[1].to(DEVICE, non_blocking=True)
                 outputs = model(inputs)
                 loss = loss_fn(outputs, labels)
                 running_validation_loss += loss.item()
+
+            frame = np.zeros((IMG_SIZE * 2, IMG_SIZE * 2, 3), dtype=np.uint8)
+            random_indices = random.sample(range(len(train_dataloader.dataset)), 4)
+            for i, idx in enumerate(random_indices):
+                x, y = train_dataloader.dataset[idx]
+                x = x.unsqueeze(0).to(DEVICE)
+                bboxes = cellboxes_to_boxes(model(x))
+                bboxes = non_max_suppression(bboxes[0])
+                image = x[0].permute(1,2,0).to(DEVICE)
+                image = (image * 255).byte().detach().cpu().numpy()
+                row = i // 2
+                col = i % 2
+                frame[row*IMG_SIZE:(row+1)*IMG_SIZE, col*IMG_SIZE:(col+1)*IMG_SIZE] = cv2.resize(image, (IMG_SIZE, IMG_SIZE))
+                for box in bboxes:
+                    box = box[2:]
+                    upper_left_x = (box[0] - box[2] / 2) * IMG_SIZE
+                    upper_left_y = (box[1] - box[3] / 2) * IMG_SIZE
+                    width = box[2] * IMG_SIZE
+                    height = box[3] * IMG_SIZE
+                    cv2.rectangle(frame, (int(col*IMG_SIZE + upper_left_x), int(row*IMG_SIZE + upper_left_y)), (int(col*IMG_SIZE + upper_left_x + width), int(row*IMG_SIZE + upper_left_y + height)), (255, 0, 0), 2)
+                true_boxes = cellboxes_to_boxes(y.unsqueeze(0))[0]
+                for box in true_boxes:
+                    class_label, confidence, x, y, width, height = box
+                    if confidence > 0.5:
+                        upper_left_x = (x - width / 2) * IMG_SIZE
+                        upper_left_y = (y - height / 2) * IMG_SIZE
+                        width *= IMG_SIZE
+                        height *= IMG_SIZE
+                        cv2.rectangle(frame, (int(col*IMG_SIZE + upper_left_x), int(row*IMG_SIZE + upper_left_y)), (int(col*IMG_SIZE + upper_left_x + width), int(row*IMG_SIZE + upper_left_y + height)), (0, 255, 0), 2)
+
         running_validation_loss /= len(val_dataloader)
         validation_loss = running_validation_loss
 
@@ -626,6 +708,7 @@ def main():
             'validation_time': epoch_validation_time,
             'mAP_time': epoch_mAP_time
         }, epoch + 1)
+        summary_writer.add_images('Images', frame, epoch + 1, dataformats='HWC')
         training_epoch = epoch
         training_time_prediction = time.time()
         PROGRESS_PRINT = "running"
