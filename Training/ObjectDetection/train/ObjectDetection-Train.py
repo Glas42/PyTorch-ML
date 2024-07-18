@@ -35,7 +35,7 @@ IMG_SIZE = 448
 IMG_CHANNELS = ['Grayscale', 'Binarize', 'RGB', 'RG', 'GB', 'RB', 'R', 'G', 'B'][2]
 IOU_THRESHOLD = 0.5
 CONFIDENCE_THRESHOLD = 0.5
-NMS_ACROSS_ALL_CLASSES = True
+NMS_ACROSS_ALL_CLASSES = False
 LEARNING_RATE = 0.0001
 MAX_LEARNING_RATE = 0.001
 TRAIN_VAL_RATIO = 0.8
@@ -68,7 +68,7 @@ ARCHITECTURE = [
 
 IMG_COUNT = 0
 for file in os.listdir(DATA_PATH):
-    if file.endswith(".jpg"):
+    if file.endswith(".png") or file.endswith(".jpg") or file.endswith(".jpeg"):
         IMG_COUNT += 1
 if IMG_COUNT == 0:
     print("No images found, exiting...")
@@ -282,15 +282,15 @@ def RandomCrop(img, bboxes, min_width=0.3, min_height=0.3):
             bb_cy = (box[2] * img_height - i) / h
             bb_w = (box[3] * img_width) / w
             bb_h = (box[4] * img_height) / h
-            if bbox_coverage_ratio((bb_cx, bb_cy, bb_w, bb_h)) > 0.2:
+            if bbox_coverage_ratio((bb_cx, bb_cy, bb_w, bb_h)) > 0.4:
                 new_bboxes.append(torch.tensor([box[0], bb_cx, bb_cy, bb_w, bb_h]))
                 any_bbox_in_image = True
     return new_img, new_bboxes
 
 class CustomDataset(Dataset):
-    def __init__(self, transform=None):
+    def __init__(self, files=None, transform=None):
+        self.files = files
         self.transform = transform
-        self.files = [f for f in os.listdir(DATA_PATH) if f.endswith('.jpg')]
 
     def __len__(self):
         return len(self.files)
@@ -298,7 +298,7 @@ class CustomDataset(Dataset):
     def __getitem__(self, index):
         img_name = self.files[index]
         img_path = os.path.join(DATA_PATH, img_name)
-        label_path = os.path.join(DATA_PATH, img_name.replace('.jpg', '.txt'))
+        label_path = os.path.join(DATA_PATH, img_name.replace(img_name.split('.')[-1], 'txt'))
         boxes = []
         with open(label_path) as f:
             for label in f.readlines():
@@ -318,7 +318,10 @@ class CustomDataset(Dataset):
                 boxes.append([class_label, x, y, width, height])
         image = Image.open(img_path).convert("RGB")
         boxes = torch.tensor(boxes)
-        image, boxes = self.transform(image, boxes)
+        if self.transform != None:
+            image, boxes = self.transform(image, boxes)
+        else:
+            image = transforms.ToTensor()(image)
         label_matrix = torch.zeros((SPLIT_SIZE, SPLIT_SIZE, CLASSES + BOUNDINGBOXES * 5))
         for box in boxes:
             class_label, x, y, width, height = box.tolist()
@@ -501,28 +504,31 @@ def main():
 
         def __call__(self, img, bboxes):
             for t in self.transforms:
-                if t == RandomCrop:
+                if t == "RandomCrop":
                     img, bboxes = RandomCrop(img, bboxes)
                 else:
                     img, bboxes = t(img), bboxes
             return img, bboxes
 
-    transform = Compose([
-        RandomCrop,
-        transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.1),
+    train_transform = Compose([
+        "RandomCrop",
         transforms.Resize((IMG_SIZE, IMG_SIZE)),
-        transforms.ToTensor(),
+        transforms.ToTensor()
     ])
 
-    # Create dataset
-    dataset = CustomDataset()
+    val_transform = Compose([
+        transforms.Resize((IMG_SIZE, IMG_SIZE)),
+        transforms.ToTensor()
+    ])
 
-    # Split the dataset into training and validation sets
-    train_size = int(TRAIN_VAL_RATIO * len(dataset))
-    val_size = len(dataset) - train_size
-    train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
+    all_files = [f for f in os.listdir(DATA_PATH) if f.endswith(".png") or f.endswith(".jpg") or f.endswith(".jpeg")]
+    random.shuffle(all_files)
+    train_size = int(len(all_files) * TRAIN_VAL_RATIO)
+    train_files = all_files[:train_size]
+    val_files = all_files[train_size:]
 
-    train_dataset.dataset.transform = transform
+    train_dataset = CustomDataset(train_files, transform=train_transform)
+    val_dataset = CustomDataset(val_files, transform=val_transform)
 
     train_dataloader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=SHUFFLE, num_workers=NUM_WORKERS, pin_memory=PIN_MEMORY, drop_last=DROP_LAST)
     val_dataloader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=SHUFFLE, num_workers=NUM_WORKERS, pin_memory=PIN_MEMORY, drop_last=DROP_LAST)
@@ -538,6 +544,8 @@ def main():
     best_model_epoch = None
     best_model_training_loss = None
     best_model_validation_loss = None
+    best_model_training_mAP = None
+    best_model_validation_mAP = None
     wait = 0
 
     print(f"\r{timestamp()}Starting training...                       ")
