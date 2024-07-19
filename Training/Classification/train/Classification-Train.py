@@ -40,6 +40,7 @@ DROPOUT = 0.1
 PATIENCE = 10
 SHUFFLE = True
 PIN_MEMORY = False
+DROP_LAST = True
 
 IMG_COUNT = 0
 for file in os.listdir(DATA_PATH):
@@ -83,73 +84,59 @@ print(timestamp() + "> Dropout:", DROPOUT)
 print(timestamp() + "> Patience:", PATIENCE)
 print(timestamp() + "> Shuffle:", SHUFFLE)
 print(timestamp() + "> Pin memory:", PIN_MEMORY)
+print(timestamp() + "> Drop last:", DROP_LAST)
 
-
-def load_data():
-    images = []
-    user_inputs = []
-    print(f"\r{timestamp()}Loading dataset...", end='', flush=True)
-    for file in os.listdir(DATA_PATH):
-        if file.endswith(".png"):
-            if IMG_CHANNELS== 'Grayscale' or IMG_CHANNELS == 'Binarize':
-                img = Image.open(os.path.join(DATA_PATH, file)).convert('L')  # Convert to grayscale
-                img = np.array(img)
-            else:
-                img = Image.open(os.path.join(DATA_PATH, file))
-                img = np.array(img)
-
-                if IMG_CHANNELS == 'RG':
-                    img = np.stack((img[:, :, 0], img[:, :, 1]), axis=2)
-                elif IMG_CHANNELS == 'GB':
-                    img = np.stack((img[:, :, 1], img[:, :, 2]), axis=2)
-                elif IMG_CHANNELS == 'RB':
-                    img = np.stack((img[:, :, 0], img[:, :, 2]), axis=2)
-                elif IMG_CHANNELS == 'R':
-                    img = img[:, :, 0]
-                    img = np.expand_dims(img, axis=2)
-                elif IMG_CHANNELS == 'G':
-                    img = img[:, :, 1]
-                    img = np.expand_dims(img, axis=2)
-                elif IMG_CHANNELS == 'B':
-                    img = img[:, :, 2]
-                    img = np.expand_dims(img, axis=2)
-
-            img = cv2.resize(img, (IMG_WIDTH, IMG_HEIGHT))
-            img = img / 255.0
-
-            if IMG_CHANNELS == 'Binarize':
-                img = cv2.threshold(img, 0.5, 1.0, cv2.THRESH_BINARY)[1]
-
-            user_inputs_file = os.path.join(DATA_PATH, file.replace(".png", ".txt"))
-            if os.path.exists(user_inputs_file):
-                with open(user_inputs_file, 'r') as f:
-                    content = str(f.read())
-                    if content.isdigit() and 0 <= int(content) < CLASSES:
-                        user_input = [0] * CLASSES
-                        user_input[int(content)] = 1
-                images.append(img)
-                user_inputs.append(user_input)
-            else:
-                pass
-
-        if len(images) % 100 == 0:
-            print(f"\r{timestamp()}Loading dataset... ({round(100 * len(images) / IMG_COUNT)}%)", end='', flush=True)
-
-    return np.array(images, dtype=np.float32), np.array(user_inputs, dtype=np.float32)
 
 # Custom dataset class
 class CustomDataset(Dataset):
-    def __init__(self, images, user_inputs, transform=None):
-        self.images = images
-        self.user_inputs = user_inputs
+    def __init__(self, files=None, transform=None):
+        self.files = files
         self.transform = transform
 
     def __len__(self):
-        return len(self.images)
+        return len(self.files)
 
-    def __getitem__(self, idx):
-        image = self.images[idx]
-        user_input = self.user_inputs[idx]
+    def __getitem__(self, index):
+        image_name = self.files[index]
+        image_path = os.path.join(DATA_PATH, image_name)
+        label_path = os.path.join(DATA_PATH, image_name.replace(image_name.split('.')[-1], 'txt'))
+
+        if IMG_CHANNELS== 'Grayscale' or IMG_CHANNELS == 'Binarize':
+            img = Image.open(image_path).convert('L')
+            img = np.array(img)
+        else:
+            img = Image.open(image_path)
+            img = np.array(img)
+
+            if IMG_CHANNELS == 'RG':
+                img = np.stack((img[:, :, 0], img[:, :, 1]), axis=2)
+            elif IMG_CHANNELS == 'GB':
+                img = np.stack((img[:, :, 1], img[:, :, 2]), axis=2)
+            elif IMG_CHANNELS == 'RB':
+                img = np.stack((img[:, :, 0], img[:, :, 2]), axis=2)
+            elif IMG_CHANNELS == 'R':
+                img = img[:, :, 0]
+                img = np.expand_dims(img, axis=2)
+            elif IMG_CHANNELS == 'G':
+                img = img[:, :, 1]
+                img = np.expand_dims(img, axis=2)
+            elif IMG_CHANNELS == 'B':
+                img = img[:, :, 2]
+                img = np.expand_dims(img, axis=2)
+
+        img = cv2.resize(img, (IMG_WIDTH, IMG_HEIGHT))
+        img = img / 255.0
+
+        if IMG_CHANNELS == 'Binarize':
+            img = cv2.threshold(img, 0.5, 1.0, cv2.THRESH_BINARY)[1]
+
+        with open(label_path, 'r') as f:
+            content = str(f.read())
+            if content.isdigit() and 0 <= int(content) < CLASSES:
+                user_input = [0] * CLASSES
+                user_input[int(content)] = 1
+
+        image = np.array(img, dtype=np.float32)
         image = self.transform(image)
         return image, torch.as_tensor(user_input, dtype=torch.float32)
 
@@ -246,26 +233,31 @@ def main():
     # Tensorboard setup
     summary_writer = SummaryWriter(f"{PATH}/Training/Classification/logs", comment="Classification-Training", flush_secs=20)
 
-    # Load data
-    images, user_inputs = load_data()
-
     # Transformations
-    transform = transforms.Compose([
+    train_transform = transforms.Compose([
         transforms.ToTensor(),
         transforms.RandomRotation(35),
         transforms.RandomCrop((round(IMG_HEIGHT * random.uniform(0.5, 1)), round(IMG_WIDTH * random.uniform(0.5, 1)))),
         transforms.Resize((IMG_HEIGHT, IMG_WIDTH))
     ])
 
-    # Create dataset
-    dataset = CustomDataset(images, user_inputs, transform=transform)
+    val_transform = transforms.Compose([
+        transforms.ToTensor()
+    ])
 
-    # Split the dataset into training and validation sets
-    train_size = int(TRAIN_VAL_RATIO * len(dataset))
-    val_size = len(dataset) - train_size
-    train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
-    train_dataloader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=SHUFFLE, num_workers=NUM_WORKERS, pin_memory=PIN_MEMORY)
-    val_dataloader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=SHUFFLE, num_workers=NUM_WORKERS, pin_memory=PIN_MEMORY)
+    # Create datasets
+    all_files = [f for f in os.listdir(DATA_PATH) if (f.endswith(".png") or f.endswith(".jpg") or f.endswith(".jpeg")) and os.path.exists(f"{DATA_PATH}/{f.replace(f.split('.')[-1], 'txt')}")]
+    random.shuffle(all_files)
+    train_size = int(len(all_files) * TRAIN_VAL_RATIO)
+    val_size = len(all_files) - train_size
+    train_files = all_files[:train_size]
+    val_files = all_files[train_size:]
+
+    train_dataset = CustomDataset(train_files, transform=train_transform)
+    val_dataset = CustomDataset(val_files, transform=val_transform)
+
+    train_dataloader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=SHUFFLE, num_workers=NUM_WORKERS, pin_memory=PIN_MEMORY, drop_last=DROP_LAST)
+    val_dataloader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=SHUFFLE, num_workers=NUM_WORKERS, pin_memory=PIN_MEMORY, drop_last=DROP_LAST)
 
     # Initialize scaler, loss function, optimizer and scheduler
     scaler = GradScaler()
@@ -477,7 +469,8 @@ def main():
                 f"torch_version#{torch.__version__}",
                 f"numpy_version#{np.__version__}",
                 f"pil_version#{Image.__version__}",
-                f"transform#{transform}",
+                f"train_transform#{train_transform}",
+                f"val_transform#{val_transform}",
                 f"optimizer#{metadata_optimizer}",
                 f"loss_function#{metadata_criterion}",
                 f"training_size#{train_size}",
@@ -560,7 +553,8 @@ def main():
                 f"torch_version#{torch.__version__}",
                 f"numpy_version#{np.__version__}",
                 f"pil_version#{Image.__version__}",
-                f"transform#{transform}",
+                f"train_transform#{train_transform}",
+                f"val_transform#{val_transform}",
                 f"optimizer#{metadata_optimizer}",
                 f"loss_function#{metadata_criterion}",
                 f"training_size#{train_size}",

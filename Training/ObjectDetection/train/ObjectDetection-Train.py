@@ -528,6 +528,7 @@ def main():
         transforms.ToTensor()
     ])
 
+    # Create datasets
     all_files = [f for f in os.listdir(DATA_PATH) if f.endswith(".png") or f.endswith(".jpg") or f.endswith(".jpeg")]
     random.shuffle(all_files)
     train_size = int(len(all_files) * TRAIN_VAL_RATIO)
