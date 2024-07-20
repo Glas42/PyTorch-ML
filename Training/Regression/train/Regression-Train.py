@@ -6,6 +6,8 @@ os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 
 from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import Dataset, DataLoader
+from torch.cuda.amp import GradScaler, autocast
+import torch.optim.lr_scheduler as lr_scheduler
 from torchvision import transforms
 import torch.nn.functional as F
 import torch.optim as optim
@@ -31,6 +33,7 @@ IMG_WIDTH = 420
 IMG_HEIGHT = 220
 IMG_CHANNELS = ['Grayscale', 'Binarize', 'RGB', 'RG', 'GB', 'RB', 'R', 'G', 'B'][1]
 LEARNING_RATE = 0.0001
+MAX_LEARNING_RATE = 0.0001
 TRAIN_VAL_RATIO = 0.8
 NUM_WORKERS = 0
 DROPOUT = 0.5
@@ -84,6 +87,7 @@ print(timestamp() + "> Image height:", IMG_HEIGHT)
 print(timestamp() + "> Image channels:", IMG_CHANNELS)
 print(timestamp() + "> Color channels:", COLOR_CHANNELS)
 print(timestamp() + "> Learning rate:", LEARNING_RATE)
+print(timestamp() + "> Max learning rate:", MAX_LEARNING_RATE)
 print(timestamp() + "> Dataset split:", TRAIN_VAL_RATIO)
 print(timestamp() + "> Number of workers:", NUM_WORKERS)
 print(timestamp() + "> Dropout:", DROPOUT)
@@ -287,7 +291,7 @@ def main():
     ])
 
     # Create datasets
-    all_files = [f for f in os.listdir(DATA_PATH) if f.endswith(".png") or f.endswith(".jpg") or f.endswith(".jpeg")]
+    all_files = [f for f in os.listdir(DATA_PATH) if (f.endswith(".png") or f.endswith(".jpg") or f.endswith(".jpeg")) and os.path.exists(f"{DATA_PATH}/{f.replace(f.split('.')[-1], 'txt')}")]
     random.shuffle(all_files)
     train_size = int(len(all_files) * TRAIN_VAL_RATIO)
     val_size = len(all_files) - train_size
@@ -306,9 +310,11 @@ def main():
     train_dataloader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=SHUFFLE, num_workers=NUM_WORKERS, pin_memory=PIN_MEMORY, drop_last=DROP_LAST)
     val_dataloader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=SHUFFLE, num_workers=NUM_WORKERS, pin_memory=PIN_MEMORY, drop_last=DROP_LAST)
 
-    # Initialize loss function and optimizer
+    # Initialize scaler, loss function, optimizer and scheduler
+    scaler = GradScaler()
     criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
+    scheduler = lr_scheduler.OneCycleLR(optimizer, max_lr=MAX_LEARNING_RATE, steps_per_epoch=len(train_dataloader), epochs=NUM_EPOCHS)
 
     # Early stopping variables
     best_validation_loss = float('inf')
@@ -372,14 +378,17 @@ def main():
         model.train()
         running_training_loss = 0.0
         for i, data in enumerate(train_dataloader, 0):
-            inputs, labels = data
-            inputs, labels = inputs.to(DEVICE), labels.to(DEVICE)
+            inputs, labels = data[0].to(DEVICE, non_blocking=True), data[1].to(DEVICE, non_blocking=True)
             optimizer.zero_grad()
-            outputs = model(inputs)
-            loss = criterion(outputs, labels)
-            loss.backward()
-            optimizer.step()
+            with autocast():
+                outputs = model(inputs)
+                loss = criterion(outputs, labels)
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
+            scheduler.step()
             running_training_loss += loss.item()
+        running_training_loss /= len(train_dataloader)
         training_loss = running_training_loss
 
         epoch_training_time = time.time() - epoch_training_start_time
@@ -390,13 +399,13 @@ def main():
         # Validation phase
         model.eval()
         running_validation_loss = 0.0
-        with torch.no_grad():
+        with torch.no_grad(), autocast():
             for i, data in enumerate(val_dataloader, 0):
-                inputs, labels = data
-                inputs, labels = inputs.to(DEVICE), labels.to(DEVICE)
+                inputs, labels = data[0].to(DEVICE, non_blocking=True), data[1].to(DEVICE, non_blocking=True)
                 outputs = model(inputs)
                 loss = criterion(outputs, labels)
                 running_validation_loss += loss.item()
+        running_validation_loss /= len(val_dataloader)
         validation_loss = running_validation_loss
 
         epoch_validation_time = time.time() - epoch_validation_start_time
@@ -498,6 +507,7 @@ def main():
                 f"image_channels#{IMG_CHANNELS}",
                 f"color_channels#{COLOR_CHANNELS}",
                 f"learning_rate#{LEARNING_RATE}",
+                f"max_learning_rate#{MAX_LEARNING_RATE}",
                 f"dataset_split#{TRAIN_VAL_RATIO}",
                 f"number_of_workers#{NUM_WORKERS}",
                 f"dropout#{DROPOUT}",
@@ -581,6 +591,7 @@ def main():
                 f"image_channels#{IMG_CHANNELS}",
                 f"color_channels#{COLOR_CHANNELS}",
                 f"learning_rate#{LEARNING_RATE}",
+                f"max_learning_rate#{MAX_LEARNING_RATE}",
                 f"dataset_split#{TRAIN_VAL_RATIO}",
                 f"number_of_workers#{NUM_WORKERS}",
                 f"dropout#{DROPOUT}",
