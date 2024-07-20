@@ -41,6 +41,7 @@ PATIENCE = 10
 SHUFFLE = True
 PIN_MEMORY = False
 DROP_LAST = True
+CACHE = True
 
 IMG_COUNT = 0
 for file in os.listdir(DATA_PATH):
@@ -85,60 +86,129 @@ print(timestamp() + "> Patience:", PATIENCE)
 print(timestamp() + "> Shuffle:", SHUFFLE)
 print(timestamp() + "> Pin memory:", PIN_MEMORY)
 print(timestamp() + "> Drop last:", DROP_LAST)
+print(timestamp() + "> Cache:", CACHE)
 
 
 # Custom dataset class
-class CustomDataset(Dataset):
-    def __init__(self, files=None, transform=None):
-        self.files = files
-        self.transform = transform
+if CACHE:
+    def load_data(files=None, type=None):
+        images = []
+        user_inputs = []
+        print(f"\r{timestamp()}Loading {type} dataset...           ", end='', flush=True)
+        for file in os.listdir(DATA_PATH):
+            if file in files:
+                if IMG_CHANNELS== 'Grayscale' or IMG_CHANNELS == 'Binarize':
+                    img = Image.open(os.path.join(DATA_PATH, file)).convert('L')  # Convert to grayscale
+                    img = np.array(img)
+                else:
+                    img = Image.open(os.path.join(DATA_PATH, file))
+                    img = np.array(img)
 
-    def __len__(self):
-        return len(self.files)
+                    if IMG_CHANNELS == 'RG':
+                        img = np.stack((img[:, :, 0], img[:, :, 1]), axis=2)
+                    elif IMG_CHANNELS == 'GB':
+                        img = np.stack((img[:, :, 1], img[:, :, 2]), axis=2)
+                    elif IMG_CHANNELS == 'RB':
+                        img = np.stack((img[:, :, 0], img[:, :, 2]), axis=2)
+                    elif IMG_CHANNELS == 'R':
+                        img = img[:, :, 0]
+                        img = np.expand_dims(img, axis=2)
+                    elif IMG_CHANNELS == 'G':
+                        img = img[:, :, 1]
+                        img = np.expand_dims(img, axis=2)
+                    elif IMG_CHANNELS == 'B':
+                        img = img[:, :, 2]
+                        img = np.expand_dims(img, axis=2)
 
-    def __getitem__(self, index):
-        image_name = self.files[index]
-        image_path = os.path.join(DATA_PATH, image_name)
-        label_path = os.path.join(DATA_PATH, image_name.replace(image_name.split('.')[-1], 'txt'))
+                img = cv2.resize(img, (IMG_WIDTH, IMG_HEIGHT))
+                img = img / 255.0
 
-        if IMG_CHANNELS== 'Grayscale' or IMG_CHANNELS == 'Binarize':
-            img = Image.open(image_path).convert('L')
-            img = np.array(img)
-        else:
-            img = Image.open(image_path)
-            img = np.array(img)
+                if IMG_CHANNELS == 'Binarize':
+                    img = cv2.threshold(img, 0.5, 1.0, cv2.THRESH_BINARY)[1]
 
-            if IMG_CHANNELS == 'RG':
-                img = np.stack((img[:, :, 0], img[:, :, 1]), axis=2)
-            elif IMG_CHANNELS == 'GB':
-                img = np.stack((img[:, :, 1], img[:, :, 2]), axis=2)
-            elif IMG_CHANNELS == 'RB':
-                img = np.stack((img[:, :, 0], img[:, :, 2]), axis=2)
-            elif IMG_CHANNELS == 'R':
-                img = img[:, :, 0]
-                img = np.expand_dims(img, axis=2)
-            elif IMG_CHANNELS == 'G':
-                img = img[:, :, 1]
-                img = np.expand_dims(img, axis=2)
-            elif IMG_CHANNELS == 'B':
-                img = img[:, :, 2]
-                img = np.expand_dims(img, axis=2)
+                user_inputs_file = os.path.join(DATA_PATH, file.replace(".png", ".txt"))
+                if os.path.exists(user_inputs_file):
+                    with open(user_inputs_file, 'r') as f:
+                        content = str(f.read())
+                        if content.isdigit() and 0 <= int(content) < CLASSES:
+                            user_input = [0] * CLASSES
+                            user_input[int(content)] = 1
+                    images.append(img)
+                    user_inputs.append(user_input)
+                else:
+                    pass
 
-        img = cv2.resize(img, (IMG_WIDTH, IMG_HEIGHT))
-        img = img / 255.0
+            if len(images) % round(len(files) / 100) == 0:
+                print(f"\r{timestamp()}Loading {type} dataset... ({round(100 * len(images) / len(files))}%)", end='', flush=True)
 
-        if IMG_CHANNELS == 'Binarize':
-            img = cv2.threshold(img, 0.5, 1.0, cv2.THRESH_BINARY)[1]
+        return np.array(images, dtype=np.float32), np.array(user_inputs, dtype=np.float32)
 
-        with open(label_path, 'r') as f:
-            content = str(f.read())
-            if content.isdigit() and 0 <= int(content) < CLASSES:
-                user_input = [0] * CLASSES
-                user_input[int(content)] = 1
+    class CustomDataset(Dataset):
+        def __init__(self, images, user_inputs, transform=None):
+            self.images = images
+            self.user_inputs = user_inputs
+            self.transform = transform
 
-        image = np.array(img, dtype=np.float32)
-        image = self.transform(image)
-        return image, torch.as_tensor(user_input, dtype=torch.float32)
+        def __len__(self):
+            return len(self.images)
+
+        def __getitem__(self, idx):
+            image = self.images[idx]
+            user_input = self.user_inputs[idx]
+            image = self.transform(image)
+            return image, torch.as_tensor(user_input, dtype=torch.float32)
+
+else:
+
+    class CustomDataset(Dataset):
+        def __init__(self, files=None, transform=None):
+            self.files = files
+            self.transform = transform
+
+        def __len__(self):
+            return len(self.files)
+
+        def __getitem__(self, index):
+            image_name = self.files[index]
+            image_path = os.path.join(DATA_PATH, image_name)
+            label_path = os.path.join(DATA_PATH, image_name.replace(image_name.split('.')[-1], 'txt'))
+
+            if IMG_CHANNELS== 'Grayscale' or IMG_CHANNELS == 'Binarize':
+                img = Image.open(image_path).convert('L')
+                img = np.array(img)
+            else:
+                img = Image.open(image_path)
+                img = np.array(img)
+
+                if IMG_CHANNELS == 'RG':
+                    img = np.stack((img[:, :, 0], img[:, :, 1]), axis=2)
+                elif IMG_CHANNELS == 'GB':
+                    img = np.stack((img[:, :, 1], img[:, :, 2]), axis=2)
+                elif IMG_CHANNELS == 'RB':
+                    img = np.stack((img[:, :, 0], img[:, :, 2]), axis=2)
+                elif IMG_CHANNELS == 'R':
+                    img = img[:, :, 0]
+                    img = np.expand_dims(img, axis=2)
+                elif IMG_CHANNELS == 'G':
+                    img = img[:, :, 1]
+                    img = np.expand_dims(img, axis=2)
+                elif IMG_CHANNELS == 'B':
+                    img = img[:, :, 2]
+                    img = np.expand_dims(img, axis=2)
+
+            img = cv2.resize(img, (IMG_WIDTH, IMG_HEIGHT))
+            img = img / 255.0
+
+            if IMG_CHANNELS == 'Binarize':
+                img = cv2.threshold(img, 0.5, 1.0, cv2.THRESH_BINARY)[1]
+
+            with open(label_path, 'r') as f:
+                content = str(f.read()).split(',')
+                user_input = [1 if i == 'True' else 0 if i == 'False' else float(i) for i in content]
+
+            image = np.array(img, dtype=np.float32)
+            image = self.transform(image)
+            return image, torch.as_tensor(user_input, dtype=torch.float32)
 
 # Define the model
 class ConvolutionalNeuralNetwork(nn.Module):
@@ -253,8 +323,14 @@ def main():
     train_files = all_files[:train_size]
     val_files = all_files[train_size:]
 
-    train_dataset = CustomDataset(train_files, transform=train_transform)
-    val_dataset = CustomDataset(val_files, transform=val_transform)
+    if CACHE:
+        train_images, train_user_inputs = load_data(train_files, "train")
+        val_images, val_user_inputs = load_data(val_files, "val")
+        train_dataset = CustomDataset(train_images, train_user_inputs, transform=train_transform)
+        val_dataset = CustomDataset(val_images, val_user_inputs, transform=val_transform)
+    else:
+        train_dataset = CustomDataset(train_files, transform=train_transform)
+        val_dataset = CustomDataset(val_files, transform=val_transform)
 
     train_dataloader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=SHUFFLE, num_workers=NUM_WORKERS, pin_memory=PIN_MEMORY, drop_last=DROP_LAST)
     val_dataloader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=SHUFFLE, num_workers=NUM_WORKERS, pin_memory=PIN_MEMORY, drop_last=DROP_LAST)
@@ -273,7 +349,7 @@ def main():
     best_model_validation_loss = None
     wait = 0
 
-    print(f"\r{timestamp()}Starting training...                       ")
+    print(f"\r{timestamp()}Starting training...                ")
     print("\n-----------------------------------------------------------------------------------------------------------\n")
 
     training_time_prediction = time.time()
@@ -301,21 +377,23 @@ def main():
             progress = (time.time() - epoch_total_start_time) / epoch_total_time
             if progress > 1: progress = 1
             if progress < 0: progress = 0
-            progress = '█' * int(progress * 10) + '░' * (10 - int(progress * 10))
+            progress = '█' * round(progress * 10) + '░' * (10 - round(progress * 10))
             epoch_time = round(epoch_total_time, 2) if epoch_total_time > 1 else round((epoch_total_time) * 1000)
-            eta = time.strftime('%H:%M:%S', time.gmtime(round((training_time_prediction - training_start_time) / (training_epoch + 1) * NUM_EPOCHS - (training_time_prediction - training_start_time) + (training_time_prediction - time.time()), 2)))
-            message = f"{progress} Epoch {training_epoch+1}, Train Loss: {num_to_str(training_loss)}, Val Loss: {num_to_str(validation_loss)}, {epoch_time}{'s' if epoch_total_time > 1 else 'ms'}/Epoch, ETA: {eta}"
+            eta = time.strftime('%H:%M:%S', time.gmtime(round((training_time_prediction - training_start_time) / (training_epoch) * NUM_EPOCHS - (training_time_prediction - training_start_time) + (training_time_prediction - time.time()), 2)))
+            message = f"{progress} Epoch {training_epoch}, Train Loss: {num_to_str(training_loss)}, Val Loss: {num_to_str(validation_loss)}, {epoch_time}{'s' if epoch_total_time > 1 else 'ms'}/Epoch, ETA: {eta}"
             print(f"\r{message}" + (" " * (len(last_message) - len(message)) if len(last_message) > len(message) else ""), end='', flush=True)
             last_message = message
             time.sleep(1)
         if PROGRESS_PRINT == "early stopped":
-            print(f"\rEarly stopping at Epoch {training_epoch+1}, Train Loss: {num_to_str(training_loss)}, Val Loss: {num_to_str(validation_loss)}                                              ", end='', flush=True)
+            message = f"Early stopping at Epoch {training_epoch}, Train Loss: {num_to_str(training_loss)}, Val Loss: {num_to_str(validation_loss)}"
+            print(f"\r{message}" + (" " * (len(last_message) - len(message)) if len(last_message) > len(message) else ""), end='', flush=True)
         elif PROGRESS_PRINT == "finished":
-            print(f"\rFinished at Epoch {training_epoch+1}, Train Loss: {num_to_str(training_loss)}, Val Loss: {num_to_str(validation_loss)}                                              ", end='', flush=True)
+            message = f"Finished at Epoch {training_epoch}, Train Loss: {num_to_str(training_loss)}, Val Loss: {num_to_str(validation_loss)}"
+            print(f"\r{message}" + (" " * (len(last_message) - len(message)) if len(last_message) > len(message) else ""), end='', flush=True)
         PROGRESS_PRINT = "received"
     threading.Thread(target=training_progress_print, daemon=True).start()
 
-    for epoch in range(NUM_EPOCHS):
+    for epoch, _ in enumerate(range(NUM_EPOCHS), 1):
         epoch_total_start_time = time.time()
 
 
@@ -368,7 +446,7 @@ def main():
             wait = 0
         else:
             wait += 1
-            if wait >= PATIENCE:
+            if wait >= PATIENCE and PATIENCE > 0:
                 epoch_total_time = time.time() - epoch_total_start_time
                 # Log values to Tensorboard
                 summary_writer.add_scalars(f'Stats', {
@@ -377,7 +455,7 @@ def main():
                     'epoch_total_time': epoch_total_time,
                     'epoch_training_time': epoch_training_time,
                     'epoch_validation_time': epoch_validation_time
-                }, epoch + 1)
+                }, epoch)
                 training_time_prediction = time.time()
                 PROGRESS_PRINT = "early stopped"
                 break
@@ -391,7 +469,7 @@ def main():
             'epoch_total_time': epoch_total_time,
             'epoch_training_time': epoch_training_time,
             'epoch_validation_time': epoch_validation_time
-        }, epoch + 1)
+        }, epoch)
         training_epoch = epoch
         training_time_prediction = time.time()
         PROGRESS_PRINT = "running"
@@ -444,7 +522,7 @@ def main():
     metadata_optimizer = str(optimizer).replace('\n', '')
     metadata_criterion = str(criterion).replace('\n', '')
     metadata_model = str(model).replace('\n', '')
-    metadata = (f"epochs#{epoch+1}",
+    metadata = (f"epochs#{epoch}",
                 f"batch#{BATCH_SIZE}",
                 f"classes#{CLASSES}",
                 f"outputs#{CLASSES}",
@@ -528,7 +606,7 @@ def main():
     metadata_optimizer = str(optimizer).replace('\n', '')
     metadata_criterion = str(criterion).replace('\n', '')
     metadata_model = str(best_model).replace('\n', '')
-    metadata = (f"epochs#{best_model_epoch+1}",
+    metadata = (f"epochs#{best_model_epoch}",
                 f"batch#{BATCH_SIZE}",
                 f"classes#{CLASSES}",
                 f"outputs#{CLASSES}",
