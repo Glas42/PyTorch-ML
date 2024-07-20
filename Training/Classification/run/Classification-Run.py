@@ -39,7 +39,7 @@ for var in metadata:
         print("Training dataset accuracy: " + str(var.split("#")[1]))
     if "validation_dataset_accuracy" in var:
         print("Validation dataset accuracy: " + str(var.split("#")[1]))
-    if "transform" in var:
+    if "val_transform" in var:
         transform = var.replace("\\n", "\n").replace('\\', '').split("#")[1]
         transform_list = []
         transform_parts = transform.strip().split("\n")
