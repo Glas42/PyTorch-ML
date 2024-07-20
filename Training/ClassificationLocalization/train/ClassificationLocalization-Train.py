@@ -26,9 +26,9 @@ PATH = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)
 DATA_PATH = PATH + "\\ModelFiles\\EditedTrainingData"
 MODEL_PATH = PATH + "\\ModelFiles\\Models"
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-NUM_EPOCHS = 100
+NUM_EPOCHS = 10
 BATCH_SIZE = 10
-CLASSES = 5
+CLASSES = 10
 IMG_WIDTH = 320
 IMG_HEIGHT = 320
 IMG_CHANNELS = ['Grayscale', 'Binarize', 'RGB', 'RG', 'GB', 'RB', 'R', 'G', 'B'][0]
@@ -129,8 +129,13 @@ if CACHE:
                 labels_file = os.path.join(DATA_PATH, file.replace(".png", ".txt"))
                 if os.path.exists(labels_file):
                     with open(labels_file, 'r') as f:
-                        content = str(f.read()).split(" ")
-                        label = int(content[0]), float(content[1]), float(content[2]), float(content[3]), float(content[4])
+                        content = str(f.read()).split(",")
+                        label = [0] * (CLASSES + 4)
+                        label[int(content[0])] = 1
+                        label[CLASSES + 0] = float(content[1])
+                        label[CLASSES + 1] = float(content[2])
+                        label[CLASSES + 2] = float(content[3])
+                        label[CLASSES + 3] = float(content[4])
                     images.append(img)
                     labels.append(label)
                 else:
@@ -202,11 +207,25 @@ else:
 
             with open(label_path, 'r') as f:
                 content = str(f.read()).split(',')
-                label = int(content[0]), float(content[1]), float(content[2]), float(content[3]), float(content[4])
+                label = [0] * (CLASSES + 4)
+                label[int(content[0])] = 1
+                label[CLASSES + 0] = float(content[1])
+                label[CLASSES + 1] = float(content[2])
+                label[CLASSES + 2] = float(content[3])
+                label[CLASSES + 3] = float(content[4])
 
             image = np.array(img, dtype=np.float32)
             image = self.transform(image)
             return image, torch.as_tensor(label, dtype=torch.float32)
+
+# Define the loss function
+class Loss(nn.Module):
+    def __init__(self):
+        super(Loss, self).__init__()
+
+    def forward(self, predictions=None, target=None):
+        loss = nn.L1Loss()(predictions, target)
+        return loss
 
 # Define the model
 class ConvolutionalNeuralNetwork(nn.Module):
@@ -232,7 +251,7 @@ class ConvolutionalNeuralNetwork(nn.Module):
         self.linear_1 = nn.Linear(128 * (IMG_WIDTH // 8) * (IMG_HEIGHT // 8), 256, bias=False)
         self.bn4 = nn.BatchNorm1d(256)
         self.relu_4 = nn.ReLU()
-        self.linear_2 = nn.Linear(256, CLASSES, bias=False)
+        self.linear_2 = nn.Linear(256, CLASSES + 4, bias=False)
 
     def forward(self, x):
         x = self.conv2d_1(x)
@@ -257,6 +276,18 @@ class ConvolutionalNeuralNetwork(nn.Module):
         x = self.relu_4(x)
         x = self.linear_2(x)
         return x
+
+def GenerateRandomSampleImage(model, dataset):
+    ramdom_index = random.randint(0, len(dataset) - 1)
+    image, label = dataset[ramdom_index][0].to(DEVICE, non_blocking=True), dataset[ramdom_index][1].to(DEVICE, non_blocking=True)
+    prediction = model(image.unsqueeze(0))
+    image = image.permute(1, 2, 0).cpu().numpy()
+    if image.shape[2] != 3:
+        image = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+    prediction = prediction.tolist()[0]
+    cv2.rectangle(image, (round(label[CLASSES + 0].item() * IMG_WIDTH), round(label[CLASSES + 1].item() * IMG_HEIGHT)), (round(label[CLASSES + 2].item() * IMG_WIDTH), round(label[CLASSES + 3].item() * IMG_HEIGHT)), (0, 255, 0), 2)
+    cv2.rectangle(image, (round(prediction[CLASSES + 0] * IMG_WIDTH), round(prediction[CLASSES + 1] * IMG_HEIGHT)), (round(prediction[CLASSES + 2] * IMG_WIDTH), round(prediction[CLASSES + 3] * IMG_HEIGHT)), (0, 0, 255), 2)
+    return image
 
 def main():
     # Initialize model
@@ -333,7 +364,7 @@ def main():
 
     # Initialize scaler, loss function, optimizer and scheduler
     scaler = GradScaler()
-    criterion = nn.L1Loss()
+    criterion = Loss()
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
     scheduler = lr_scheduler.OneCycleLR(optimizer, max_lr=MAX_LEARNING_RATE, steps_per_epoch=len(train_dataloader), epochs=NUM_EPOCHS)
 
@@ -434,6 +465,15 @@ def main():
         epoch_validation_time = time.time() - epoch_validation_start_time
 
 
+        epoch_mAP_start_time = time.time()
+
+        # Calculate mAP on train dataset
+
+        # Calculate mAP on validation dataset
+
+        epoch_mAP_time = time.time() - epoch_mAP_start_time
+
+
         # Early stopping
         if validation_loss < best_validation_loss:
             best_validation_loss = validation_loss
@@ -454,6 +494,8 @@ def main():
                     'epoch_training_time': epoch_training_time,
                     'epoch_validation_time': epoch_validation_time
                 }, epoch)
+                image = GenerateRandomSampleImage(model, val_dataset)
+                summary_writer.add_image(f'Image', image, epoch, dataformats='HWC')
                 training_time_prediction = time.time()
                 PROGRESS_PRINT = "early stopped"
                 break
@@ -468,6 +510,8 @@ def main():
             'epoch_training_time': epoch_training_time,
             'epoch_validation_time': epoch_validation_time
         }, epoch)
+        image = GenerateRandomSampleImage(model, val_dataset)
+        summary_writer.add_image(f'Image', image, epoch, dataformats='HWC')
         training_epoch = epoch
         training_time_prediction = time.time()
         PROGRESS_PRINT = "running"
