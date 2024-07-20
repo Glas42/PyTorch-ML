@@ -106,10 +106,10 @@ for file in os.listdir(f"{os.path.dirname(PATH)}\\EditedTrainingData"):
 
         with open(os.path.join(f"{os.path.dirname(PATH)}\\EditedTrainingData", file.replace(".png", ".txt")), 'r') as f:
             content = str(f.read())
-            user_input = [float(i) if i.isdigit() else 1 if i == "True" else 0 for i in content.split(',')]
+            label = [float(i) if i.isdigit() else 1 if i == "True" else 0 for i in content.split(',')]
 
         for i in range(len(output)):
-            differences[i] += abs(user_input[i] - output[i])
+            differences[i] += abs(label[i] - output[i])
 
 for i in range(len(differences)):
     differences[i] = abs(differences[i])

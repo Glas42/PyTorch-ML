@@ -102,7 +102,7 @@ print(timestamp() + "> Cache:", CACHE)
 if CACHE:
     def load_data(files=None, type=None):
         images = []
-        user_inputs = []
+        labels = []
         print(f"\r{timestamp()}Loading {type} dataset...           ", end='', flush=True)
         for file in os.listdir(DATA_PATH):
             if file in files:
@@ -135,25 +135,25 @@ if CACHE:
                 if IMG_CHANNELS == 'Binarize':
                     img = cv2.threshold(img, 0.5, 1.0, cv2.THRESH_BINARY)[1]
 
-                user_inputs_file = os.path.join(DATA_PATH, file.replace(".png", ".txt"))
-                if os.path.exists(user_inputs_file):
-                    with open(user_inputs_file, 'r') as f:
+                labels_file = os.path.join(DATA_PATH, file.replace(".png", ".txt"))
+                if os.path.exists(labels_file):
+                    with open(labels_file, 'r') as f:
                         content = str(f.read()).split(',')
-                        user_input = [1 if i == 'True' else 0 if i == 'False' else float(i) for i in content]
+                        label = [1 if i == 'True' else 0 if i == 'False' else float(i) for i in content]
                     images.append(img)
-                    user_inputs.append(user_input)
+                    labels.append(label)
                 else:
                     pass
 
             if len(images) % round(len(files) / 100) == 0:
                 print(f"\r{timestamp()}Loading {type} dataset... ({round(100 * len(images) / len(files))}%)", end='', flush=True)
 
-        return np.array(images, dtype=np.float32), np.array(user_inputs, dtype=np.float32)
+        return np.array(images, dtype=np.float32), np.array(labels, dtype=np.float32)
 
     class CustomDataset(Dataset):
-        def __init__(self, images, user_inputs, transform=None):
+        def __init__(self, images, labels, transform=None):
             self.images = images
-            self.user_inputs = user_inputs
+            self.labels = labels
             self.transform = transform
 
         def __len__(self):
@@ -161,9 +161,9 @@ if CACHE:
 
         def __getitem__(self, idx):
             image = self.images[idx]
-            user_input = self.user_inputs[idx]
+            label = self.labels[idx]
             image = self.transform(image)
-            return image, torch.as_tensor(user_input, dtype=torch.float32)
+            return image, torch.as_tensor(label, dtype=torch.float32)
 
 else:
 
@@ -211,11 +211,11 @@ else:
 
             with open(label_path, 'r') as f:
                 content = str(f.read()).split(',')
-                user_input = [1 if i == 'True' else 0 if i == 'False' else float(i) for i in content]
+                label = [1 if i == 'True' else 0 if i == 'False' else float(i) for i in content]
 
             image = np.array(img, dtype=np.float32)
             image = self.transform(image)
-            return image, torch.as_tensor(user_input, dtype=torch.float32)
+            return image, torch.as_tensor(label, dtype=torch.float32)
 
 # Define the model
 class ConvolutionalNeuralNetwork(nn.Module):
@@ -299,10 +299,10 @@ def main():
     val_files = all_files[train_size:]
 
     if CACHE:
-        train_images, train_user_inputs = load_data(train_files, "train")
-        val_images, val_user_inputs = load_data(val_files, "val")
-        train_dataset = CustomDataset(train_images, train_user_inputs, transform=train_transform)
-        val_dataset = CustomDataset(val_images, val_user_inputs, transform=val_transform)
+        train_images, train_labels = load_data(train_files, "train")
+        val_images, val_labels = load_data(val_files, "val")
+        train_dataset = CustomDataset(train_images, train_labels, transform=train_transform)
+        val_dataset = CustomDataset(val_images, val_labels, transform=val_transform)
     else:
         train_dataset = CustomDataset(train_files, transform=train_transform)
         val_dataset = CustomDataset(val_files, transform=val_transform)

@@ -10,3 +10,4 @@
 /Training/Regression/logs
 /Training/ObjectDetection/logs
 /Training/Classification/logs
+/Training/ClassificationLocalization/logs

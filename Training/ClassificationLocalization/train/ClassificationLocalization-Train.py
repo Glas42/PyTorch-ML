@@ -27,17 +27,17 @@ DATA_PATH = PATH + "\\ModelFiles\\EditedTrainingData"
 MODEL_PATH = PATH + "\\ModelFiles\\Models"
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 NUM_EPOCHS = 100
-BATCH_SIZE = 500
-CLASSES = 4
-IMG_WIDTH = 90
-IMG_HEIGHT = 150
+BATCH_SIZE = 10
+CLASSES = 5
+IMG_WIDTH = 320
+IMG_HEIGHT = 320
 IMG_CHANNELS = ['Grayscale', 'Binarize', 'RGB', 'RG', 'GB', 'RB', 'R', 'G', 'B'][0]
 LEARNING_RATE = 0.001
 MAX_LEARNING_RATE = 0.001
 TRAIN_VAL_RATIO = 0.8
 NUM_WORKERS = 0
 DROPOUT = 0.1
-PATIENCE = 10
+PATIENCE = -1
 SHUFFLE = True
 PIN_MEMORY = False
 DROP_LAST = True
@@ -93,7 +93,7 @@ print(timestamp() + "> Cache:", CACHE)
 if CACHE:
     def load_data(files=None, type=None):
         images = []
-        user_inputs = []
+        labels = []
         print(f"\r{timestamp()}Loading {type} dataset...           ", end='', flush=True)
         for file in os.listdir(DATA_PATH):
             if file in files:
@@ -126,27 +126,25 @@ if CACHE:
                 if IMG_CHANNELS == 'Binarize':
                     img = cv2.threshold(img, 0.5, 1.0, cv2.THRESH_BINARY)[1]
 
-                user_inputs_file = os.path.join(DATA_PATH, file.replace(".png", ".txt"))
-                if os.path.exists(user_inputs_file):
-                    with open(user_inputs_file, 'r') as f:
-                        content = str(f.read())
-                        if content.isdigit() and 0 <= int(content) < CLASSES:
-                            user_input = [0] * CLASSES
-                            user_input[int(content)] = 1
+                labels_file = os.path.join(DATA_PATH, file.replace(".png", ".txt"))
+                if os.path.exists(labels_file):
+                    with open(labels_file, 'r') as f:
+                        content = str(f.read()).split(" ")
+                        label = int(content[0]), float(content[1]), float(content[2]), float(content[3]), float(content[4])
                     images.append(img)
-                    user_inputs.append(user_input)
+                    labels.append(label)
                 else:
                     pass
 
             if len(images) % round(len(files) / 100) == 0:
                 print(f"\r{timestamp()}Loading {type} dataset... ({round(100 * len(images) / len(files))}%)", end='', flush=True)
 
-        return np.array(images, dtype=np.float32), np.array(user_inputs, dtype=np.float32)
+        return np.array(images, dtype=np.float32), np.array(labels, dtype=np.float32)
 
     class CustomDataset(Dataset):
-        def __init__(self, images, user_inputs, transform=None):
+        def __init__(self, images, labels, transform=None):
             self.images = images
-            self.user_inputs = user_inputs
+            self.labels = labels
             self.transform = transform
 
         def __len__(self):
@@ -154,9 +152,9 @@ if CACHE:
 
         def __getitem__(self, idx):
             image = self.images[idx]
-            user_input = self.user_inputs[idx]
+            label = self.labels[idx]
             image = self.transform(image)
-            return image, torch.as_tensor(user_input, dtype=torch.float32)
+            return image, torch.as_tensor(label, dtype=torch.float32)
 
 else:
 
@@ -204,11 +202,11 @@ else:
 
             with open(label_path, 'r') as f:
                 content = str(f.read()).split(',')
-                user_input = [1 if i == 'True' else 0 if i == 'False' else float(i) for i in content]
+                label = int(content[0]), float(content[1]), float(content[2]), float(content[3]), float(content[4])
 
             image = np.array(img, dtype=np.float32)
             image = self.transform(image)
-            return image, torch.as_tensor(user_input, dtype=torch.float32)
+            return image, torch.as_tensor(label, dtype=torch.float32)
 
 # Define the model
 class ConvolutionalNeuralNetwork(nn.Module):
@@ -235,7 +233,6 @@ class ConvolutionalNeuralNetwork(nn.Module):
         self.bn4 = nn.BatchNorm1d(256)
         self.relu_4 = nn.ReLU()
         self.linear_2 = nn.Linear(256, CLASSES, bias=False)
-        self.softmax = nn.Softmax(dim=1)
 
     def forward(self, x):
         x = self.conv2d_1(x)
@@ -259,7 +256,6 @@ class ConvolutionalNeuralNetwork(nn.Module):
         x = self.bn4(x)
         x = self.relu_4(x)
         x = self.linear_2(x)
-        x = self.softmax(x)
         return x
 
 def main():
@@ -290,18 +286,18 @@ def main():
     print(timestamp() + "Loading...")
 
     # Create tensorboard logs folder if it doesn't exist
-    if not os.path.exists(f"{PATH}/Training/Classification/logs"):
-        os.makedirs(f"{PATH}/Training/Classification/logs")
+    if not os.path.exists(f"{PATH}/Training/ClassificationLocalization/logs"):
+        os.makedirs(f"{PATH}/Training/ClassificationLocalization/logs")
 
     # Delete previous tensorboard logs
-    for obj in os.listdir(f"{PATH}/Training/Classification/logs"):
+    for obj in os.listdir(f"{PATH}/Training/ClassificationLocalization/logs"):
         try:
-            shutil.rmtree(f"{PATH}/Training/Classification/logs/{obj}")
+            shutil.rmtree(f"{PATH}/Training/ClassificationLocalization/logs/{obj}")
         except:
-            os.remove(f"{PATH}/Training/Classification/logs/{obj}")
+            os.remove(f"{PATH}/Training/ClassificationLocalization/logs/{obj}")
 
     # Tensorboard setup
-    summary_writer = SummaryWriter(f"{PATH}/Training/Classification/logs", comment="Classification-Training", flush_secs=20)
+    summary_writer = SummaryWriter(f"{PATH}/Training/ClassificationLocalization/logs", comment="ClassificationLocalization-Training", flush_secs=20)
 
     # Transformations
     train_transform = transforms.Compose([
@@ -324,10 +320,10 @@ def main():
     val_files = all_files[train_size:]
 
     if CACHE:
-        train_images, train_user_inputs = load_data(train_files, "train")
-        val_images, val_user_inputs = load_data(val_files, "val")
-        train_dataset = CustomDataset(train_images, train_user_inputs, transform=train_transform)
-        val_dataset = CustomDataset(val_images, val_user_inputs, transform=val_transform)
+        train_images, train_labels = load_data(train_files, "train")
+        val_images, val_labels = load_data(val_files, "val")
+        train_dataset = CustomDataset(train_images, train_labels, transform=train_transform)
+        val_dataset = CustomDataset(val_images, val_labels, transform=val_transform)
     else:
         train_dataset = CustomDataset(train_files, transform=train_transform)
         val_dataset = CustomDataset(val_files, transform=val_transform)
@@ -337,7 +333,7 @@ def main():
 
     # Initialize scaler, loss function, optimizer and scheduler
     scaler = GradScaler()
-    criterion = nn.CrossEntropyLoss()
+    criterion = nn.L1Loss()
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
     scheduler = lr_scheduler.OneCycleLR(optimizer, max_lr=MAX_LEARNING_RATE, steps_per_epoch=len(train_dataloader), epochs=NUM_EPOCHS)
 
@@ -410,8 +406,10 @@ def main():
                 loss = criterion(outputs, labels)
             scaler.scale(loss).backward()
             scaler.step(optimizer)
+            scale = scaler.get_scale()
             scaler.update()
-            scheduler.step()
+            if scale <= scaler.get_scale():
+                scheduler.step()
             running_training_loss += loss.item()
         running_training_loss /= len(train_dataloader)
         training_loss = running_training_loss
@@ -564,7 +562,7 @@ def main():
     for i in range(5):
         try:
             last_model = torch.jit.script(model)
-            torch.jit.save(last_model, os.path.join(MODEL_PATH, f"ClassificationModel-LAST-{TRAINING_DATE}.pt"), _extra_files=metadata)
+            torch.jit.save(last_model, os.path.join(MODEL_PATH, f"ClassificationLocalizationModel-LAST-{TRAINING_DATE}.pt"), _extra_files=metadata)
             last_model_saved = True
             break
         except:
@@ -648,7 +646,7 @@ def main():
     for i in range(5):
         try:
             best_model = torch.jit.script(best_model)
-            torch.jit.save(best_model, os.path.join(MODEL_PATH, f"ClassificationModel-BEST-{TRAINING_DATE}.pt"), _extra_files=metadata)
+            torch.jit.save(best_model, os.path.join(MODEL_PATH, f"ClassificationLocalizationModel-BEST-{TRAINING_DATE}.pt"), _extra_files=metadata)
             best_model_saved = True
             break
         except:
