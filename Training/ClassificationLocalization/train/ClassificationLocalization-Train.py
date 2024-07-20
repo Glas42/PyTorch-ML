@@ -26,11 +26,11 @@ PATH = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)
 DATA_PATH = PATH + "\\ModelFiles\\EditedTrainingData"
 MODEL_PATH = PATH + "\\ModelFiles\\Models"
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-NUM_EPOCHS = 10
+NUM_EPOCHS = 100
 BATCH_SIZE = 10
 CLASSES = 10
-IMG_WIDTH = 320
-IMG_HEIGHT = 320
+IMG_WIDTH = 140
+IMG_HEIGHT = 140
 IMG_CHANNELS = ['Grayscale', 'Binarize', 'RGB', 'RG', 'GB', 'RB', 'R', 'G', 'B'][0]
 LEARNING_RATE = 0.001
 MAX_LEARNING_RATE = 0.001
@@ -129,7 +129,7 @@ if CACHE:
                 labels_file = os.path.join(DATA_PATH, file.replace(".png", ".txt"))
                 if os.path.exists(labels_file):
                     with open(labels_file, 'r') as f:
-                        content = str(f.read()).split(",")
+                        content = str(f.read()).split(" ")
                         label = [0] * (CLASSES + 4)
                         label[int(content[0])] = 1
                         label[CLASSES + 0] = float(content[1])
@@ -206,7 +206,7 @@ else:
                 img = cv2.threshold(img, 0.5, 1.0, cv2.THRESH_BINARY)[1]
 
             with open(label_path, 'r') as f:
-                content = str(f.read()).split(',')
+                content = str(f.read()).split(' ')
                 label = [0] * (CLASSES + 4)
                 label[int(content[0])] = 1
                 label[CLASSES + 0] = float(content[1])
@@ -222,10 +222,15 @@ else:
 class Loss(nn.Module):
     def __init__(self):
         super(Loss, self).__init__()
+        self.class_loss = nn.CrossEntropyLoss()
+        self.bbox_loss = nn.L1Loss()
 
     def forward(self, predictions=None, target=None):
-        loss = nn.L1Loss()(predictions, target)
-        return loss
+        class_output, bbox_output = predictions
+        class_target, bbox_target = target[:, :CLASSES], target[:, CLASSES:]
+        class_loss = self.class_loss(class_output, class_target.argmax(dim=1))
+        bbox_loss = self.bbox_loss(bbox_output, bbox_target)
+        return class_loss + bbox_loss
 
 # Define the model
 class ConvolutionalNeuralNetwork(nn.Module):
@@ -251,7 +256,9 @@ class ConvolutionalNeuralNetwork(nn.Module):
         self.linear_1 = nn.Linear(128 * (IMG_WIDTH // 8) * (IMG_HEIGHT // 8), 256, bias=False)
         self.bn4 = nn.BatchNorm1d(256)
         self.relu_4 = nn.ReLU()
-        self.linear_2 = nn.Linear(256, CLASSES + 4, bias=False)
+        self.linear_2 = nn.Linear(256, CLASSES)
+        self.linear_3 = nn.Linear(256, 4)
+        self.softmax = nn.Softmax(dim=1)
 
     def forward(self, x):
         x = self.conv2d_1(x)
@@ -274,19 +281,35 @@ class ConvolutionalNeuralNetwork(nn.Module):
         x = self.linear_1(x)
         x = self.bn4(x)
         x = self.relu_4(x)
-        x = self.linear_2(x)
-        return x
+        class_output = self.linear_2(x)
+        class_output = self.softmax(class_output)
+        bbox_output = self.linear_3(x)
+        return class_output, bbox_output
 
 def GenerateRandomSampleImage(model, dataset):
-    ramdom_index = random.randint(0, len(dataset) - 1)
-    image, label = dataset[ramdom_index][0].to(DEVICE, non_blocking=True), dataset[ramdom_index][1].to(DEVICE, non_blocking=True)
-    prediction = model(image.unsqueeze(0))
+    random_index = random.randint(0, len(dataset) - 1)
+    image, label = dataset[random_index][0].to(DEVICE, non_blocking=True), dataset[random_index][1].to(DEVICE, non_blocking=True)
+    class_output, bbox_output = model(image.unsqueeze(0))
+    class_prediction = class_output.tolist()[0]
+    bbox_prediction = bbox_output.tolist()[0]
     image = image.permute(1, 2, 0).cpu().numpy()
     if image.shape[2] != 3:
-        image = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
-    prediction = prediction.tolist()[0]
-    cv2.rectangle(image, (round(label[CLASSES + 0].item() * IMG_WIDTH), round(label[CLASSES + 1].item() * IMG_HEIGHT)), (round(label[CLASSES + 2].item() * IMG_WIDTH), round(label[CLASSES + 3].item() * IMG_HEIGHT)), (0, 255, 0), 2)
-    cv2.rectangle(image, (round(prediction[CLASSES + 0] * IMG_WIDTH), round(prediction[CLASSES + 1] * IMG_HEIGHT)), (round(prediction[CLASSES + 2] * IMG_WIDTH), round(prediction[CLASSES + 3] * IMG_HEIGHT)), (0, 0, 255), 2)
+        image = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
+    x1 = label[CLASSES + 0].item() * IMG_WIDTH - label[CLASSES + 2].item() * IMG_WIDTH / 2
+    y1 = label[CLASSES + 1].item() * IMG_HEIGHT - label[CLASSES + 3].item() * IMG_HEIGHT / 2
+    x2 = label[CLASSES + 0].item() * IMG_WIDTH + label[CLASSES + 2].item() * IMG_WIDTH / 2
+    y2 = label[CLASSES + 1].item() * IMG_HEIGHT + label[CLASSES + 3].item() * IMG_HEIGHT / 2
+    cv2.rectangle(image, (round(x1), round(y1)), (round(x2), round(y2)), (0, 255, 0), 1)
+    x1 = bbox_prediction[0] * IMG_WIDTH - bbox_prediction[2] * IMG_WIDTH / 2
+    y1 = bbox_prediction[1] * IMG_HEIGHT - bbox_prediction[3] * IMG_HEIGHT / 2
+    x2 = bbox_prediction[0] * IMG_WIDTH + bbox_prediction[2] * IMG_WIDTH / 2
+    y2 = bbox_prediction[1] * IMG_HEIGHT + bbox_prediction[3] * IMG_HEIGHT / 2
+    cv2.rectangle(image, (round(x1), round(y1)), (round(x2), round(y2)), (255, 0, 0), 1)
+    label_np = label.cpu().numpy()
+    cv2.putText(image, str(np.argmax(label_np[:CLASSES])), (0, 16), cv2.FONT_HERSHEY_SIMPLEX, 0.682, (0, 255, 0), 1, cv2.LINE_AA)
+    cv2.putText(image, str(np.argmax(class_prediction)), (20, 16), cv2.FONT_HERSHEY_SIMPLEX, 0.682, (255, 0, 0), 1, cv2.LINE_AA)
+    cv2.imshow("Image", image)
+    cv2.waitKey(1)
     return image
 
 def main():
@@ -332,10 +355,7 @@ def main():
 
     # Transformations
     train_transform = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.RandomRotation(35),
-        transforms.RandomCrop((round(IMG_HEIGHT * random.uniform(0.5, 1)), round(IMG_WIDTH * random.uniform(0.5, 1)))),
-        transforms.Resize((IMG_HEIGHT, IMG_WIDTH))
+        transforms.ToTensor()
     ])
 
     val_transform = transforms.Compose([
@@ -433,8 +453,8 @@ def main():
             inputs, labels = data[0].to(DEVICE, non_blocking=True), data[1].to(DEVICE, non_blocking=True)
             optimizer.zero_grad()
             with autocast():
-                outputs = model(inputs)
-                loss = criterion(outputs, labels)
+                class_output, bbox_output = model(inputs)
+                loss = criterion((class_output, bbox_output), labels)
             scaler.scale(loss).backward()
             scaler.step(optimizer)
             scale = scaler.get_scale()
