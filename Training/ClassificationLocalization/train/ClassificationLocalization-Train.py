@@ -26,14 +26,14 @@ PATH = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)
 DATA_PATH = PATH + "\\ModelFiles\\EditedTrainingData"
 MODEL_PATH = PATH + "\\ModelFiles\\Models"
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-NUM_EPOCHS = 100
+NUM_EPOCHS = 10000
 BATCH_SIZE = 10
 CLASSES = 10
-IMG_WIDTH = 140
-IMG_HEIGHT = 140
+IMG_WIDTH = 56
+IMG_HEIGHT = 56
 IMG_CHANNELS = ['Grayscale', 'Binarize', 'RGB', 'RG', 'GB', 'RB', 'R', 'G', 'B'][0]
-LEARNING_RATE = 0.001
-MAX_LEARNING_RATE = 0.001
+LEARNING_RATE = 0.0001
+MAX_LEARNING_RATE = 0.01
 TRAIN_VAL_RATIO = 0.8
 NUM_WORKERS = 0
 DROPOUT = 0.1
@@ -88,6 +88,50 @@ print(timestamp() + "> Pin memory:", PIN_MEMORY)
 print(timestamp() + "> Drop last:", DROP_LAST)
 print(timestamp() + "> Cache:", CACHE)
 
+
+def GenerateRandomSampleImage(model, dataset):
+    random_index = random.randint(0, len(dataset) - 1)
+    image, label = dataset[random_index][0].to(DEVICE, non_blocking=True), dataset[random_index][1].to(DEVICE, non_blocking=True)
+    class_output, bbox_output = model(image.unsqueeze(0))
+    class_prediction = class_output.tolist()[0]
+    bbox_prediction = bbox_output.tolist()[0]
+    image = image.permute(1, 2, 0).cpu().numpy()
+    if image.shape[2] != 3:
+        image = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
+    x1 = label[CLASSES + 0].item() * IMG_WIDTH - label[CLASSES + 2].item() * IMG_WIDTH / 2
+    y1 = label[CLASSES + 1].item() * IMG_HEIGHT - label[CLASSES + 3].item() * IMG_HEIGHT / 2
+    x2 = label[CLASSES + 0].item() * IMG_WIDTH + label[CLASSES + 2].item() * IMG_WIDTH / 2
+    y2 = label[CLASSES + 1].item() * IMG_HEIGHT + label[CLASSES + 3].item() * IMG_HEIGHT / 2
+    cv2.rectangle(image, (round(x1), round(y1)), (round(x2), round(y2)), (0, 255, 0), 1)
+    x1 = bbox_prediction[0] * IMG_WIDTH - bbox_prediction[2] * IMG_WIDTH / 2
+    y1 = bbox_prediction[1] * IMG_HEIGHT - bbox_prediction[3] * IMG_HEIGHT / 2
+    x2 = bbox_prediction[0] * IMG_WIDTH + bbox_prediction[2] * IMG_WIDTH / 2
+    y2 = bbox_prediction[1] * IMG_HEIGHT + bbox_prediction[3] * IMG_HEIGHT / 2
+    cv2.rectangle(image, (round(x1), round(y1)), (round(x2), round(y2)), (255, 0, 0), 1)
+    label_np = label.cpu().numpy()
+    cv2.putText(image, str(np.argmax(label_np[:CLASSES])), (0, 16), cv2.FONT_HERSHEY_SIMPLEX, 0.682, (0, 255, 0), 1, cv2.LINE_AA)
+    cv2.putText(image, str(np.argmax(class_prediction)), (20, 16), cv2.FONT_HERSHEY_SIMPLEX, 0.682, (255, 0, 0), 1, cv2.LINE_AA)
+    return image
+
+def IntersectionOverUnion(predictions=None, labels=None):
+    box1_x1 = predictions[..., 0:1] - predictions[..., 2:3] / 2
+    box1_y1 = predictions[..., 1:2] - predictions[..., 3:4] / 2
+    box1_x2 = predictions[..., 0:1] + predictions[..., 2:3] / 2
+    box1_y2 = predictions[..., 1:2] + predictions[..., 3:4] / 2
+    box2_x1 = labels[..., 0:1] - labels[..., 2:3] / 2
+    box2_y1 = labels[..., 1:2] - labels[..., 3:4] / 2
+    box2_x2 = labels[..., 0:1] + labels[..., 2:3] / 2
+    box2_y2 = labels[..., 1:2] + labels[..., 3:4] / 2
+    x1 = torch.max(box1_x1, box2_x1)
+    y1 = torch.max(box1_y1, box2_y1)
+    x2 = torch.min(box1_x2, box2_x2)
+    y2 = torch.min(box1_y2, box2_y2)
+    intersection = (x2 - x1).clamp(0) * (y2 - y1).clamp(0)
+    box1_area = abs((box1_x2 - box1_x1) * (box1_y2 - box1_y1))
+    box2_area = abs((box2_x2 - box2_x1) * (box2_y2 - box2_y1))
+    union = box1_area + box2_area - intersection
+    iou = torch.where(union == 0, torch.tensor(0.0, device=union.device), intersection / union)
+    return iou
 
 # Custom dataset class
 if CACHE:
@@ -285,32 +329,6 @@ class ConvolutionalNeuralNetwork(nn.Module):
         class_output = self.softmax(class_output)
         bbox_output = self.linear_3(x)
         return class_output, bbox_output
-
-def GenerateRandomSampleImage(model, dataset):
-    random_index = random.randint(0, len(dataset) - 1)
-    image, label = dataset[random_index][0].to(DEVICE, non_blocking=True), dataset[random_index][1].to(DEVICE, non_blocking=True)
-    class_output, bbox_output = model(image.unsqueeze(0))
-    class_prediction = class_output.tolist()[0]
-    bbox_prediction = bbox_output.tolist()[0]
-    image = image.permute(1, 2, 0).cpu().numpy()
-    if image.shape[2] != 3:
-        image = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
-    x1 = label[CLASSES + 0].item() * IMG_WIDTH - label[CLASSES + 2].item() * IMG_WIDTH / 2
-    y1 = label[CLASSES + 1].item() * IMG_HEIGHT - label[CLASSES + 3].item() * IMG_HEIGHT / 2
-    x2 = label[CLASSES + 0].item() * IMG_WIDTH + label[CLASSES + 2].item() * IMG_WIDTH / 2
-    y2 = label[CLASSES + 1].item() * IMG_HEIGHT + label[CLASSES + 3].item() * IMG_HEIGHT / 2
-    cv2.rectangle(image, (round(x1), round(y1)), (round(x2), round(y2)), (0, 255, 0), 1)
-    x1 = bbox_prediction[0] * IMG_WIDTH - bbox_prediction[2] * IMG_WIDTH / 2
-    y1 = bbox_prediction[1] * IMG_HEIGHT - bbox_prediction[3] * IMG_HEIGHT / 2
-    x2 = bbox_prediction[0] * IMG_WIDTH + bbox_prediction[2] * IMG_WIDTH / 2
-    y2 = bbox_prediction[1] * IMG_HEIGHT + bbox_prediction[3] * IMG_HEIGHT / 2
-    cv2.rectangle(image, (round(x1), round(y1)), (round(x2), round(y2)), (255, 0, 0), 1)
-    label_np = label.cpu().numpy()
-    cv2.putText(image, str(np.argmax(label_np[:CLASSES])), (0, 16), cv2.FONT_HERSHEY_SIMPLEX, 0.682, (0, 255, 0), 1, cv2.LINE_AA)
-    cv2.putText(image, str(np.argmax(class_prediction)), (20, 16), cv2.FONT_HERSHEY_SIMPLEX, 0.682, (255, 0, 0), 1, cv2.LINE_AA)
-    cv2.imshow("Image", image)
-    cv2.waitKey(1)
-    return image
 
 def main():
     # Initialize model
@@ -531,7 +549,9 @@ def main():
             'epoch_validation_time': epoch_validation_time
         }, epoch)
         image = GenerateRandomSampleImage(model, val_dataset)
-        summary_writer.add_image(f'Image', image, epoch, dataformats='HWC')
+        summary_writer.add_image(f'Validation Dataset Image', image, epoch, dataformats='HWC')
+        image = GenerateRandomSampleImage(model, train_dataset)
+        summary_writer.add_image(f'Train Dataset Image', image, epoch, dataformats='HWC')
         training_epoch = epoch
         training_time_prediction = time.time()
         PROGRESS_PRINT = "running"
