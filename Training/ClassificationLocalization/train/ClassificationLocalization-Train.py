@@ -29,8 +29,8 @@ DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 NUM_EPOCHS = 10000
 BATCH_SIZE = 10
 CLASSES = 10
-IMG_WIDTH = 56
-IMG_HEIGHT = 56
+IMG_WIDTH = 140
+IMG_HEIGHT = 140
 IMG_CHANNELS = ['Grayscale', 'Binarize', 'RGB', 'RG', 'GB', 'RB', 'R', 'G', 'B'][0]
 LEARNING_RATE = 0.0001
 MAX_LEARNING_RATE = 0.01
@@ -280,55 +280,62 @@ class Loss(nn.Module):
 class ConvolutionalNeuralNetwork(nn.Module):
     def __init__(self):
         super(ConvolutionalNeuralNetwork, self).__init__()
-        self.conv2d_1 = nn.Conv2d(COLOR_CHANNELS, 32, (3, 3), padding=1, bias=False)
-        self.bn1 = nn.BatchNorm2d(32)
-        self.relu_1 = nn.ReLU()
-        self.maxpool_1 = nn.MaxPool2d((2, 2))
 
-        self.conv2d_2 = nn.Conv2d(32, 64, (3, 3), padding=1, bias=False)
-        self.bn2 = nn.BatchNorm2d(64)
-        self.relu_2 = nn.ReLU()
-        self.maxpool_2 = nn.MaxPool2d((2, 2))
+        self.conv1 = nn.Conv2d(in_channels=COLOR_CHANNELS, out_channels=16, kernel_size=5, padding=2)
+        self.conv2 = nn.Conv2d(in_channels=16, out_channels=32, kernel_size=5, padding=2)
+        self.conv3 = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=5, padding=2)
+        self.conv4 = nn.Conv2d(in_channels=64, out_channels=128, kernel_size=5, padding=2)
 
-        self.conv2d_3 = nn.Conv2d(64, 128, (3, 3), padding=1, bias=False)
-        self.bn3 = nn.BatchNorm2d(128)
-        self.relu_3 = nn.ReLU()
-        self.maxpool_3 = nn.MaxPool2d((2, 2))
+        self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.pool2 = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.pool3 = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.pool4 = nn.AdaptiveAvgPool2d((1, 1))
 
-        self.flatten = nn.Flatten()
-        self.dropout = nn.Dropout(DROPOUT)
-        self.linear_1 = nn.Linear(128 * (IMG_WIDTH // 8) * (IMG_HEIGHT // 8), 256, bias=False)
-        self.bn4 = nn.BatchNorm1d(256)
-        self.relu_4 = nn.ReLU()
-        self.linear_2 = nn.Linear(256, CLASSES)
-        self.linear_3 = nn.Linear(256, 4)
-        self.softmax = nn.Softmax(dim=1)
+        self.class_fc1 = nn.Linear(in_features=128, out_features=240)
+        self.class_fc2 = nn.Linear(in_features=240, out_features=120)
+        self.class_out = nn.Linear(in_features=120, out_features=CLASSES)
 
-    def forward(self, x):
-        x = self.conv2d_1(x)
-        x = self.bn1(x)
-        x = self.relu_1(x)
-        x = self.maxpool_1(x)
+        self.box_fc1 = nn.Linear(in_features=128, out_features=240)
+        self.box_fc2 = nn.Linear(in_features=240, out_features=120)
+        self.box_out = nn.Linear(in_features=120, out_features=4)
 
-        x = self.conv2d_2(x)
-        x = self.bn2(x)
-        x = self.relu_2(x)
-        x = self.maxpool_2(x)
+    def forward(self, t):
+        t = self.conv1(t)
+        t = nn.functional.relu(t)
+        t = self.pool1(t)
 
-        x = self.conv2d_3(x)
-        x = self.bn3(x)
-        x = self.relu_3(x)
-        x = self.maxpool_3(x)
+        t = self.conv2(t)
+        t = nn.functional.relu(t)
+        t = self.pool2(t)
 
-        x = self.flatten(x)
-        x = self.dropout(x)
-        x = self.linear_1(x)
-        x = self.bn4(x)
-        x = self.relu_4(x)
-        class_output = self.linear_2(x)
-        class_output = self.softmax(class_output)
-        bbox_output = self.linear_3(x)
-        return class_output, bbox_output
+        t = self.conv3(t)
+        t = nn.functional.relu(t)
+        t = self.pool3(t)
+
+        t = self.conv4(t)
+        t = nn.functional.relu(t)
+        t = self.pool4(t)
+
+        t = torch.flatten(t, start_dim=1)
+
+        class_t = self.class_fc1(t)
+        class_t = nn.functional.relu(class_t)
+
+        class_t = self.class_fc2(class_t)
+        class_t = nn.functional.relu(class_t)
+
+        class_t = nn.functional.softmax(self.class_out(class_t), dim=1)
+
+        box_t = self.box_fc1(t)
+        box_t = nn.functional.relu(box_t)
+
+        box_t = self.box_fc2(box_t)
+        box_t = nn.functional.relu(box_t)
+
+        box_t = self.box_out(box_t)
+        box_t = nn.functional.sigmoid(box_t)
+
+        return [class_t, box_t]
 
 def main():
     # Initialize model

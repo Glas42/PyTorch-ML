@@ -203,8 +203,10 @@ else:
                 img = cv2.threshold(img, 0.5, 1.0, cv2.THRESH_BINARY)[1]
 
             with open(label_path, 'r') as f:
-                content = str(f.read()).split(',')
-                label = [1 if i == 'True' else 0 if i == 'False' else float(i) for i in content]
+                content = str(f.read())
+                if content.isdigit() and 0 <= int(content) < CLASSES:
+                    label = [0] * CLASSES
+                    label[int(content)] = 1
 
             image = np.array(img, dtype=np.float32)
             image = self.transform(image)
