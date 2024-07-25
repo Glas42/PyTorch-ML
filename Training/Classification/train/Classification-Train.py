@@ -94,7 +94,7 @@ if CACHE:
     def load_data(files=None, type=None):
         images = []
         labels = []
-        print(f"\r{timestamp()}Loading {type} dataset...           ", end='', flush=True)
+        print(f"\r{timestamp()}Caching {type} dataset...           ", end='', flush=True)
         for file in os.listdir(DATA_PATH):
             if file in files:
                 if IMG_CHANNELS== 'Grayscale' or IMG_CHANNELS == 'Binarize':
@@ -139,7 +139,7 @@ if CACHE:
                     pass
 
             if len(images) % round(len(files) / 100) == 0:
-                print(f"\r{timestamp()}Loading {type} dataset... ({round(100 * len(images) / len(files))}%)", end='', flush=True)
+                print(f"\r{timestamp()}Caching {type} dataset... ({round(100 * len(images) / len(files))}%)", end='', flush=True)
 
         return np.array(images, dtype=np.float32), np.array(labels, dtype=np.float32)
 
