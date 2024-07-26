@@ -104,7 +104,7 @@ for file in os.listdir(f"{os.path.dirname(PATH)}\\EditedTrainingData"):
         with torch.no_grad():
             output = np.array(model(frame)[0].tolist())
 
-        with open(os.path.join(f"{os.path.dirname(PATH)}\\EditedTrainingData", file.replace(file.split(".")[-1], ".txt")), 'r') as f:
+        with open(os.path.join(f"{os.path.dirname(PATH)}\\EditedTrainingData", file.replace(file.split(".")[-1], "txt")), 'r') as f:
             content = str(f.read())
             label = [float(i) if i.isdigit() else 1 if i == "True" else 0 for i in content.split(',')]
 

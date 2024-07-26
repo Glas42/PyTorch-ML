@@ -121,7 +121,7 @@ for file in os.listdir(f"{os.path.dirname(PATH)}\\EditedTrainingData"):
         if obj_confidence < lowest[obj_class]:
             lowest[obj_class] = obj_confidence
 
-        with open(os.path.join(f"{os.path.dirname(PATH)}\\EditedTrainingData", file.replace(file.split(".")[-1], ".txt")), 'r') as f:
+        with open(os.path.join(f"{os.path.dirname(PATH)}\\EditedTrainingData", file.replace(file.split(".")[-1], "txt")), 'r') as f:
             content = f.read()
             if int(obj_class) == int(content):
                 correct += 1

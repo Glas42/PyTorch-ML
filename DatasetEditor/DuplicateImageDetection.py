@@ -54,7 +54,7 @@ for i, file in enumerate(duplicate_images):
     except:
         pass
     try:
-        os.remove(os.path.join(file.replace(file.split(".")[-1], ".txt")))
+        os.remove(os.path.join(file.replace(file.split(".")[-1], "txt")))
     except:
         pass
     if i % 100 == 0:

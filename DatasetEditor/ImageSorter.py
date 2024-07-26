@@ -24,7 +24,7 @@ if dataset_for_object_detection == False:
 else:
     for file in os.listdir(f"{PATH}EditedTrainingData"):
         if file.endswith(".png") or file.endswith(".jpg") or file.endswith(".jpeg"):
-            with open(os.path.join(f"{PATH}EditedTrainingData/{file.replace(file.split(".")[-1], '.txt')}"), 'r') as f:
+            with open(os.path.join(f"{PATH}EditedTrainingData/{file.replace(file.split(".")[-1], 'txt')}"), 'r') as f:
                 content = f.read().split(',')
                 x1, y1, x2, y2 = float(content[0]), float(content[1]), float(content[2]), float(content[3])
             images.append((cv2.imread(os.path.join(f"{PATH}EditedTrainingData/{file}")), (x1, y1, x2, y2, str(content[4])), f"{PATH}EditedTrainingData/{file}"))
@@ -57,7 +57,7 @@ while index < len(images):
             except Exception as ex:
                 print(ex)
             try:
-                os.remove(os.path.join(path.replace(path.split(".")[-1], ".txt")))
+                os.remove(os.path.join(path.replace(path.split(".")[-1], "txt")))
             except Exception as ex:
                 print(ex)
             index += 1
