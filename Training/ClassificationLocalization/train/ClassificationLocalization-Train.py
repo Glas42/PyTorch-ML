@@ -45,7 +45,7 @@ CACHE = True
 
 IMG_COUNT = 0
 for file in os.listdir(DATA_PATH):
-    if file.endswith(".png"):
+    if file.endswith(".png") or file.endswith(".jpg") or file.endswith(".jpeg"):
         IMG_COUNT += 1
 if IMG_COUNT == 0:
     print("No images found, exiting...")
@@ -170,7 +170,7 @@ if CACHE:
                 if IMG_CHANNELS == 'Binarize':
                     img = cv2.threshold(img, 0.5, 1.0, cv2.THRESH_BINARY)[1]
 
-                labels_file = os.path.join(DATA_PATH, file.replace(".png", ".txt"))
+                labels_file = os.path.join(DATA_PATH, file.replace(file.split(".")[-1], ".txt"))
                 if os.path.exists(labels_file):
                     with open(labels_file, 'r') as f:
                         content = str(f.read()).split(" ")

@@ -8,7 +8,7 @@ lower = np.array([1, 1, 1])
 upper = np.array([255, 255, 255])
 
 for i, file in enumerate(os.listdir(f"{PATH}TrainingData")):
-    if file.endswith(".png"):
+    if file.endswith(".png") or file.endswith(".jpg") or file.endswith(".jpeg"):
         img = cv2.imread(os.path.join(f"{PATH}EditedTrainingData", file))
 
         mask = cv2.inRange(img, lower, upper)

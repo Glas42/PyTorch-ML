@@ -12,19 +12,19 @@ PATH = os.path.dirname(os.path.dirname(__file__)) + "\\ModelFiles\\"
 
 print("Copying images...")
 for file in os.listdir(f"{PATH}TrainingData"):
-    if file.endswith(".png"):
+    if file.endswith(".png") or file.endswith(".jpg") or file.endswith(".jpeg"):
         if not os.path.exists(os.path.join(f"{PATH}EditedTrainingData", file)):
             shutil.copy2(os.path.join(f"{PATH}TrainingData", file), os.path.join(f"{PATH}EditedTrainingData", file))
 
 print("Creating image list... (May take a while, needs a lot of ram!)")
 if dataset_for_object_detection == False:
     for file in os.listdir(f"{PATH}EditedTrainingData"):
-        if file.endswith(".png"):
+        if file.endswith(".png") or file.endswith(".jpg") or file.endswith(".jpeg"):
             images.append((cv2.imread(os.path.join(f"{PATH}EditedTrainingData/{file}")), f"{PATH}EditedTrainingData/{file}"))
 else:
     for file in os.listdir(f"{PATH}EditedTrainingData"):
-        if file.endswith(".png"):
-            with open(os.path.join(f"{PATH}EditedTrainingData/{file.replace('.png', '.txt')}"), 'r') as f:
+        if file.endswith(".png") or file.endswith(".jpg") or file.endswith(".jpeg"):
+            with open(os.path.join(f"{PATH}EditedTrainingData/{file.replace(file.split(".")[-1], '.txt')}"), 'r') as f:
                 content = f.read().split(',')
                 x1, y1, x2, y2 = float(content[0]), float(content[1]), float(content[2]), float(content[3])
             images.append((cv2.imread(os.path.join(f"{PATH}EditedTrainingData/{file}")), (x1, y1, x2, y2, str(content[4])), f"{PATH}EditedTrainingData/{file}"))
@@ -57,7 +57,7 @@ while index < len(images):
             except Exception as ex:
                 print(ex)
             try:
-                os.remove(os.path.join(path.replace(".png", ".txt")))
+                os.remove(os.path.join(path.replace(path.split(".")[-1], ".txt")))
             except Exception as ex:
                 print(ex)
             index += 1

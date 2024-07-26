@@ -23,13 +23,13 @@ if clear_folder:
 
 print("\nCopying images...")
 for file in os.listdir(f"{PATH}TrainingData"):
-    if file.endswith(".png"):
+    if file.endswith(".png") or file.endswith(".jpg") or file.endswith(".jpeg"):
         if os.path.exists(os.path.join(f"{PATH}EditedTrainingData", file)) == False or overwrite:
             if new_names:
-                name = str(len(os.listdir(f"{PATH}EditedTrainingData")) // (2 if os.path.exists(f"{PATH}TrainingData{file.replace('.png', '.txt')}") else 1) + 1) + "." + file.split('.')[-1]
+                name = str(len(os.listdir(f"{PATH}EditedTrainingData")) // (2 if os.path.exists(f"{PATH}TrainingData{file.replace(file.split(".")[-1], '.txt')}") else 1) + 1) + "." + file.split('.')[-1]
             shutil.copy2(os.path.join(f"{PATH}TrainingData", file), os.path.join(f"{PATH}EditedTrainingData", name if new_names else file.replace(".", "_")))
             try:
-                shutil.copy2(os.path.join(f"{PATH}TrainingData", file.replace(".png", ".txt")), os.path.join(f"{PATH}EditedTrainingData", name.replace(".png", ".txt") if new_names else file.replace(".png", ".txt").replace(".", "_")))
+                shutil.copy2(os.path.join(f"{PATH}TrainingData", file.replace(file.split(".")[-1], ".txt")), os.path.join(f"{PATH}EditedTrainingData", name.replace(name.split(".")[-1], ".txt") if new_names else file.replace(file.split(".")[-1], ".txt").replace(".", "_")))
             except:
                 pass
 print("Images copied.")
@@ -38,7 +38,7 @@ corrupted_images = 0
 if delete_corrupted_data:
     print("\nSearching for corrupted images...")
     for file in os.listdir(f"{PATH}EditedTrainingData"):
-        if file.endswith(".png"):
+        if file.endswith(".png") or file.endswith(".jpg") or file.endswith(".jpeg"):
             try:
                 img = None
                 img = cv2.imread(os.path.join(f"{PATH}EditedTrainingData", file))
@@ -48,7 +48,7 @@ if delete_corrupted_data:
                     except:
                         pass
                     try:
-                        os.remove(os.path.join(f"{PATH}EditedTrainingData", file.replace(".png", ".txt")))
+                        os.remove(os.path.join(f"{PATH}EditedTrainingData", file.replace(file.split(".")[-1], ".txt")))
                     except:
                         pass
                     corrupted_images += 1
@@ -58,7 +58,7 @@ if delete_corrupted_data:
                 except:
                     pass
                 try:
-                    os.remove(os.path.join(f"{PATH}EditedTrainingData", file.replace(".png", ".txt")))
+                    os.remove(os.path.join(f"{PATH}EditedTrainingData", file.replace(file.split(".")[-1], ".txt")))
                 except:
                     pass
                 corrupted_images += 1

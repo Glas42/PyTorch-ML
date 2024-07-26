@@ -73,7 +73,7 @@ highest = [0] * CLASSES
 lowest = [1] * CLASSES
 
 for file in os.listdir(f"{os.path.dirname(PATH)}\\EditedTrainingData"):
-    if file.endswith(".png"):
+    if file.endswith(".png") or file.endswith(".jpg") or file.endswith(".jpeg"):
 
         frame = cv2.imread(os.path.join(f"{os.path.dirname(PATH)}\\EditedTrainingData", file))
         frame = np.array(frame, dtype=np.float32)
@@ -121,7 +121,7 @@ for file in os.listdir(f"{os.path.dirname(PATH)}\\EditedTrainingData"):
         if obj_confidence < lowest[obj_class]:
             lowest[obj_class] = obj_confidence
 
-        with open(os.path.join(f"{os.path.dirname(PATH)}\\EditedTrainingData", file.replace(".png", ".txt")), 'r') as f:
+        with open(os.path.join(f"{os.path.dirname(PATH)}\\EditedTrainingData", file.replace(file.split(".")[-1], ".txt")), 'r') as f:
             content = f.read()
             if int(obj_class) == int(content):
                 correct += 1

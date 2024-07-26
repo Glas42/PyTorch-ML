@@ -68,7 +68,7 @@ total = len(os.listdir(f"{os.path.dirname(PATH)}\\EditedTrainingData")) // 2
 differences = [0] * OUTPUTS
 
 for file in os.listdir(f"{os.path.dirname(PATH)}\\EditedTrainingData"):
-    if file.endswith(".png"):
+    if file.endswith(".png") or file.endswith(".jpg") or file.endswith(".jpeg"):
 
         frame = cv2.imread(os.path.join(f"{os.path.dirname(PATH)}\\EditedTrainingData", file))
         frame = np.array(frame, dtype=np.float32)
@@ -104,7 +104,7 @@ for file in os.listdir(f"{os.path.dirname(PATH)}\\EditedTrainingData"):
         with torch.no_grad():
             output = np.array(model(frame)[0].tolist())
 
-        with open(os.path.join(f"{os.path.dirname(PATH)}\\EditedTrainingData", file.replace(".png", ".txt")), 'r') as f:
+        with open(os.path.join(f"{os.path.dirname(PATH)}\\EditedTrainingData", file.replace(file.split(".")[-1], ".txt")), 'r') as f:
             content = str(f.read())
             label = [float(i) if i.isdigit() else 1 if i == "True" else 0 for i in content.split(',')]
 

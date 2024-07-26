@@ -17,7 +17,7 @@ images = []
 start = time.time()
 print("\rLoading Images...", end="")
 for i, file in enumerate(os.listdir(f"{PATH}EditedTrainingData")):
-    if file.endswith(".png"):
+    if file.endswith(".png") or file.endswith(".jpg") or file.endswith(".jpeg"):
         image = cv2.imread(os.path.join(f"{PATH}EditedTrainingData", file))
         if image is None:
             continue
@@ -54,7 +54,7 @@ for i, file in enumerate(duplicate_images):
     except:
         pass
     try:
-        os.remove(os.path.join(file.replace(".png", ".txt")))
+        os.remove(os.path.join(file.replace(file.split(".")[-1], ".txt")))
     except:
         pass
     if i % 100 == 0:
