@@ -26,7 +26,7 @@ for file in os.listdir(f"{PATH}TrainingData"):
     if file.endswith(".png") or file.endswith(".jpg") or file.endswith(".jpeg"):
         if os.path.exists(os.path.join(f"{PATH}EditedTrainingData", file)) == False or overwrite:
             if new_names:
-                name = str(len(os.listdir(f"{PATH}EditedTrainingData")) // (2 if os.path.exists(f"{PATH}TrainingData{file.replace(file.split(".")[-1], 'txt')}") else 1) + 1) + "." + file.split('.')[-1]
+                name = str(len(os.listdir(f"{PATH}EditedTrainingData")) // (2 if os.path.exists(f"{PATH}TrainingData/{file.replace(file.split('.')[-1], 'txt')}") else 1) + 1) + "." + file.split('.')[-1]
             shutil.copy2(os.path.join(f"{PATH}TrainingData", file), os.path.join(f"{PATH}EditedTrainingData", name if new_names else file.replace(".", "_")))
             try:
                 shutil.copy2(os.path.join(f"{PATH}TrainingData", file.replace(file.split(".")[-1], "txt")), os.path.join(f"{PATH}EditedTrainingData", name.replace(name.split(".")[-1], "txt") if new_names else file.replace(file.split(".")[-1], "txt").replace(".", "_")))
