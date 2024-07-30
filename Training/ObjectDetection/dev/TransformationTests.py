@@ -13,16 +13,16 @@ IMG_SIZE = 140
 
 transform = A.Compose([
     A.RandomCrop(width=round(random.uniform(0.5, 1) * IMG_SIZE), height=round(random.uniform(0.5, 1) * IMG_SIZE)),
-    A.Rotate(limit=45, p=0.5),
+    A.Rotate(limit=15, p=1),
     A.Resize(IMG_SIZE, IMG_SIZE),
 ], bbox_params=A.BboxParams(format='yolo'))
 
 PATH = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 DATA_PATH = PATH + "\\ModelFiles\\EditedTrainingData"
 
-image = Image.open(DATA_PATH + "\\8.png")
+image = Image.open(DATA_PATH + "\\10.png")
 boxes = []
-with open(DATA_PATH + "\\8.txt") as f:
+with open(DATA_PATH + "\\10.txt") as f:
     for label in f.readlines():
         class_label, x, y, width, height = [float(x) if float(x) != int(float(x)) else int(x) for x in label.replace("\n", "").split()]
         x1 = x - width / 2
