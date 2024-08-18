@@ -50,7 +50,8 @@ for file in os.listdir(DATA_PATH):
             OUTPUTS = len(f.read().split(','))
             break
 if OUTPUTS is None:
-    print("No user inputs found, exiting...")
+    print("No labels found, exiting...")
+    exit()
 
 IMG_COUNT = 0
 for file in os.listdir(DATA_PATH):
