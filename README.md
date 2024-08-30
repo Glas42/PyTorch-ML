@@ -1,3 +1,3 @@
 # PyTorch-ML
 
-This repository contains python codes to train and run PyTorch models.
+This repository contains a collection of Python scripts for training, testing, and deploying models using PyTorch.
