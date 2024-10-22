@@ -7,9 +7,10 @@ import numpy as np
 import torchvision
 import random
 import torch
+import cv2
 import os
 
-IMG_SIZE = 140
+IMG_SIZE = 250
 
 transform = A.Compose([
     A.RandomCrop(width=round(random.uniform(0.5, 1) * IMG_SIZE), height=round(random.uniform(0.5, 1) * IMG_SIZE)),
@@ -40,6 +41,7 @@ with open(DATA_PATH + "\\10.txt") as f:
         boxes.append([class_label, x, y, width, height])
 
 image = np.array(image)
+image = cv2.resize(image, (IMG_SIZE, IMG_SIZE))
 
 temp = []
 for box in boxes:
