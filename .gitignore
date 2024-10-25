@@ -7,7 +7,4 @@
 /ModelFiles/EditedTrainingData/*
 
 # ignore the tensorboard logs
-/Training/Regression/logs
-/Training/ObjectDetection/logs
-/Training/Classification/logs
-/Training/ClassificationLocalization/logs
+/Training/**/logs
